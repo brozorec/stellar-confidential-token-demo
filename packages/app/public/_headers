@@ -1,0 +1,14 @@
+# Cloudflare Workers static-asset headers.
+#
+# Page/route responses get COOP+COEP from next.config.mjs (applied by the
+# OpenNext routing layer), but assets served directly by the Cloudflare ASSETS
+# binding BYPASS next.config headers(). bb.js spawns its wasm Web Worker from
+# /vendor/bb/main.worker.js; in a cross-origin-isolated (COEP) document a
+# dedicated worker only loads if its OWN script response carries a compatible
+# COEP header. Without it the worker is blocked, bb.js never starts, and proving
+# hangs forever on "Proving…". `next dev` applies COEP to every path, so this is
+# only needed for the Cloudflare/wrangler asset path.
+/vendor/bb/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: credentialless
+  Cross-Origin-Resource-Policy: same-origin
