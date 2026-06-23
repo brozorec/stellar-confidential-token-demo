@@ -29,6 +29,7 @@ import {
   type ConfidentialEvent,
 } from "@ctd/sdk";
 import { DEPLOYMENT } from "@/lib/deployment";
+import { errMsg } from "@/lib/err";
 import { CopyButton } from "../copy-button";
 
 const AUDITOR_SK = fromHex(DEPLOYMENT.auditorSecretHex);
@@ -176,7 +177,7 @@ export default function AuditorPage() {
       setRows(result.rows);
       setAccounts(result.accounts);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMsg(e));
     } finally {
       setBusy(false);
     }

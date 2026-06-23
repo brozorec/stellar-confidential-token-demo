@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { ConfidentialWallet, type WalletView, type TxPhase } from "@/lib/wallet";
 import { DEPLOYMENT } from "@/lib/deployment";
+import { errMsg } from "@/lib/err";
 import { EventsPanel } from "./events-panel";
 
 type ActionTab = "deposit" | "withdraw" | "transfer" | "merge";
@@ -417,10 +418,6 @@ function LogPanel({ logs }: { logs: string[] }) {
       {logs.join("\n")}
     </pre>
   );
-}
-
-function errMsg(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
 }
 
 function short(id: string): string {

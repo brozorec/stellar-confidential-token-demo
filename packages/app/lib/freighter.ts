@@ -10,6 +10,7 @@ import {
 import type { Signer } from "@ctd/sdk";
 
 import { DEPLOYMENT } from "./deployment";
+import { errMsg } from "./err";
 
 /** A {@link Signer} that can also sign arbitrary UTF-8 messages (SEP-53). */
 export interface MessageSigner extends Signer {
@@ -23,7 +24,7 @@ export async function connectFreighter(): Promise<MessageSigner> {
     throw new Error("Freighter not detected. Install the Freighter extension.");
   }
   const access = await requestAccess();
-  if (access.error) throw new Error(String(access.error));
+  if (access.error) throw new Error(errMsg(access.error));
   const address = access.address;
 
   return {
@@ -33,7 +34,7 @@ export async function connectFreighter(): Promise<MessageSigner> {
         networkPassphrase: DEPLOYMENT.networkPassphrase,
         address,
       });
-      if (res.error) throw new Error(String(res.error));
+      if (res.error) throw new Error(errMsg(res.error));
       return res.signedTxXdr;
     },
     async signMessage(message: string): Promise<Uint8Array> {
@@ -41,7 +42,7 @@ export async function connectFreighter(): Promise<MessageSigner> {
         networkPassphrase: DEPLOYMENT.networkPassphrase,
         address,
       });
-      if (res.error) throw new Error(String(res.error));
+      if (res.error) throw new Error(errMsg(res.error));
       if (res.signerAddress !== address) {
         throw new Error(`Freighter signed with ${res.signerAddress}, expected ${address}`);
       }

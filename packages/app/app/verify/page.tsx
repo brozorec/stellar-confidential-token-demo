@@ -40,6 +40,7 @@ import discloseSenderVk from "@ctd/disclosure/artifacts/disclose_sender.vk.json"
 
 import { DEPLOYMENT } from "@/lib/deployment";
 import { ensureBrowserBackend } from "@/lib/bb-loader";
+import { errMsg } from "@/lib/err";
 import { CopyButton } from "../copy-button";
 
 const RR_KEY = "ctd:disclosure:rR";
@@ -120,7 +121,7 @@ export default function VerifyPage() {
       }
     } catch (e) {
       if (e instanceof DisclosureVerifyError) setError({ stage: e.stage, message: e.message });
-      else setError({ stage: "input", message: e instanceof Error ? e.message : String(e) });
+      else setError({ stage: "input", message: errMsg(e) });
     } finally {
       setBusy(false);
     }

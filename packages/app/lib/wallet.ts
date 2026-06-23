@@ -117,12 +117,26 @@ export class ConfidentialWallet {
     }
     const keys = deriveKeys(sk, addrF);
 
+    // The first sync starts from the deploy ledger, but `getEvents` only serves
+    // ~7 days of ledgers and REJECTS a startLedger older than its window. Once
+    // the deployment ages past retention, an unclamped start makes every sync
+    // throw on connect. Clamp to the RPC's oldest retained ledger so a stale
+    // deployment degrades to "no events" instead — registration status is read
+    // from on-chain state in refresh(), not reconstructed from events.
+    let fromLedger: number = DEPLOYMENT.deployedAtLedger;
+    try {
+      const health = await client.server.getHealth();
+      if (health.oldestLedger) fromLedger = Math.max(fromLedger, health.oldestLedger + 1);
+    } catch {
+      // health endpoint variations are non-fatal; fall back to the deploy ledger
+    }
+
     const engine = new StateEngine({
       client,
       store: new LocalStorageStore(),
       keys,
       address: signer.publicKey,
-      fromLedger: DEPLOYMENT.deployedAtLedger,
+      fromLedger,
     });
 
     return new ConfidentialWallet(signer.publicKey, signer, keys, client, engine, log);

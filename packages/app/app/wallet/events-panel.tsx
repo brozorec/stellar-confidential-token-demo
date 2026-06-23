@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ConfidentialEvent, TransferEvent, DisclosureRequest } from "@ctd/sdk";
 import type { ConfidentialWallet } from "@/lib/wallet";
+import { errMsg } from "@/lib/err";
 import { CopyButton } from "../copy-button";
 
 export function EventsPanel({ wallet, reloadKey = 0 }: { wallet: ConfidentialWallet; reloadKey?: number }) {
@@ -27,7 +28,7 @@ export function EventsPanel({ wallet, reloadKey = 0 }: { wallet: ConfidentialWal
     try {
       setEvents(await wallet.listEvents());
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMsg(e));
     } finally {
       setBusy(false);
     }
@@ -143,7 +144,7 @@ function DiscloseFlow({
           : await wallet.discloseSent(ev, request);
       setBundleJson(JSON.stringify(bundle, null, 2));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMsg(e));
     } finally {
       setBusy(false);
     }
