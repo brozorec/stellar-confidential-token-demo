@@ -192,15 +192,12 @@ export default function AuditorPage() {
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <header className="mb-8">
-        <h1 className="text-2xl font-semibold">
-          Auditor
-        </h1>
-        <p className="mt-1 text-sm text-neutral-400">
-          You are the designated auditor for this deployment — every account registered under your
-          auditor id. The amounts everyone else sees as ciphertext, you read in cleartext: each
-          transfer and withdrawal carries ECDH ciphertexts addressed to your key, so one secret
-          plus the public event stream decrypts the whole ledger. No wallet, no proofs, nobody
-          asked for permission.
+        <h1 className="text-2xl font-semibold tracking-tight">Auditor</h1>
+        <p className="mt-2 text-sm leading-relaxed text-neutral-400">
+          You are the designated auditor for this deployment: every account registers under your
+          auditor id. Amounts that everyone else sees as ciphertext, you read in cleartext: each
+          transfer and withdrawal carries ECDH ciphertexts addressed to your key. No wallet, no 
+          proofs, and no account cooperation required.
         </p>
       </header>
 
@@ -208,7 +205,7 @@ export default function AuditorPage() {
         <section className="rounded border border-amber-900/70 bg-amber-950/20 p-4">
           <h3 className="mb-1 font-medium text-amber-300">Your auditor key (id {DEPLOYMENT.auditorId})</h3>
           <p className="mb-3 text-xs text-neutral-400">
-            Demo-only: this secret ships with the app so anyone can sit in the auditor&apos;s chair.
+            Demo-only: this secret ships with the app so anyone can take the auditor role.
             In a real deployment it lives in the auditor&apos;s vault and only the public key{" "}
             <code>K_aud = k·H</code> is registered on-chain.
           </p>
@@ -298,7 +295,7 @@ export default function AuditorPage() {
         </section>
       </div>
 
-      <footer className="mt-10 text-xs text-neutral-600">
+      <footer className="mt-10 font-mono text-xs text-neutral-600">
         auditor contract {shortAddr(DEPLOYMENT.contracts.auditor)} · token{" "}
         {shortAddr(DEPLOYMENT.contracts.token)} · decryption per DESIGN.md §8
       </footer>
@@ -313,7 +310,7 @@ function AuditRowView({ row }: { row: AuditRow }) {
       ? shortAddr(ev.account)
       : `${shortAddr(ev.from)} → ${shortAddr(ev.to)}`;
   return (
-    <li className="rounded border border-neutral-900 bg-black/30 p-3">
+    <li className="rounded border border-neutral-900 bg-neutral-500/10 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className={`rounded px-2 py-0.5 text-xs font-medium ${badgeCls(ev.type)}`}>{ev.type}</span>
         <span className="font-mono text-xs text-neutral-400">{parties}</span>

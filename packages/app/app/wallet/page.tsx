@@ -131,14 +131,13 @@ export default function Page() {
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <header className="mb-8">
-        <h1 className="text-2xl font-semibold">
-          Account holder <span className="text-base font-normal text-neutral-500">· your wallet</span>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Account holder <span className="text-base font-normal text-neutral-500">· wallet</span>
         </h1>
-        <p className="mt-1 text-sm text-neutral-400">
-          This page is for you, the regular user: you hold tokens, move them around, and nobody
-          watching the chain learns the amounts. If a
-          counterparty asks you to prove what one transfer paid, disclose it from the activity
-          list below.
+        <p className="mt-2 text-sm leading-relaxed text-neutral-400">
+          Hold tokens and move them without revealing amounts on-chain: deposit, merge, transfer,
+          and withdraw, each as a client-side zero-knowledge proof. To prove what a single transfer
+          paid, disclose it from the activity list below.
         </p>
       </header>
 
@@ -150,7 +149,7 @@ export default function Page() {
         <button
           onClick={connect}
           disabled={busy !== null}
-          className="rounded bg-emerald-600 px-4 py-2 font-medium hover:bg-emerald-500 disabled:opacity-50"
+          className="rounded bg-indigo-600 px-4 py-2 font-medium hover:bg-indigo-500 disabled:opacity-50"
         >
           {busy === "connecting" ? "Connecting…" : "Connect Freighter"}
         </button>
@@ -162,8 +161,8 @@ export default function Page() {
             <div className="flex items-center justify-between gap-3 rounded border border-amber-700 bg-amber-950/40 p-3 text-sm text-amber-300">
               <span>
                 {mergeNotice === "deposit"
-                  ? `Deposit landed in your receiving balance (${view.receiving.toString()}) — merge it before you can transfer or withdraw.`
-                  : `You have an incoming balance of ${view.receiving.toString()} — merge it to make it spendable.`}
+                  ? `Deposit landed in your receiving balance (${view.receiving.toString()}). Merge it before you can transfer or withdraw.`
+                  : `You have an incoming balance of ${view.receiving.toString()}. Merge it to make it spendable.`}
               </span>
               <div className="flex shrink-0 gap-2">
                 <button
@@ -193,7 +192,7 @@ export default function Page() {
               <button
                 onClick={run("register", (w) => w.register(setPhase))}
                 disabled={busy !== null}
-                className="rounded bg-emerald-600 px-4 py-2 font-medium hover:bg-emerald-500 disabled:opacity-50"
+                className="rounded bg-indigo-600 px-4 py-2 font-medium hover:bg-indigo-500 disabled:opacity-50"
               >
                 {busy === "register" ? phaseLabel(phase) : "Register"}
               </button>
@@ -316,7 +315,7 @@ export default function Page() {
 
       <LogPanel logs={logs} />
 
-      <footer className="mt-10 text-xs text-neutral-600">
+      <footer className="mt-10 font-mono text-xs text-neutral-600">
         token {short(DEPLOYMENT.contracts.token)} · verifier {short(DEPLOYMENT.contracts.verifier)} · auditor{" "}
         {short(DEPLOYMENT.contracts.auditor)} · events {DEPLOYMENT.indexerUrl ? "RPC + indexer" : "RPC only"}
       </footer>
@@ -325,7 +324,7 @@ export default function Page() {
 }
 
 const inputCls =
-  "rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-emerald-600";
+  "rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-indigo-500";
 const btnCls = "rounded px-4 py-2 text-sm font-medium disabled:opacity-50";
 
 function phaseLabel(phase: TxPhase | null): string {
@@ -383,7 +382,7 @@ function Balances({ view }: { view: WalletView | null }) {
   return (
     <section className="rounded border border-neutral-800 p-4">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm text-neutral-400">{view.address}</span>
+        <span className="font-mono text-sm text-neutral-400">{view.address}</span>
         {view.matchesChain !== null && (
           <span
             className={`rounded px-2 py-0.5 text-xs ${
@@ -418,7 +417,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 function LogPanel({ logs }: { logs: string[] }) {
   if (logs.length === 0) return null;
   return (
-    <pre className="mt-6 max-h-56 overflow-auto rounded border border-neutral-900 bg-black/40 p-3 text-xs text-neutral-400">
+    <pre className="mt-6 max-h-56 overflow-auto rounded border border-neutral-900 bg-neutral-500/10 p-3 text-xs text-neutral-400">
       {logs.join("\n")}
     </pre>
   );

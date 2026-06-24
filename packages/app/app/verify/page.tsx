@@ -137,22 +137,21 @@ export default function VerifyPage() {
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <header className="mb-8">
-        <h1 className="text-2xl font-semibold">
-          Disclosure receiver <span className="text-base font-normal text-neutral-500">· verify a disclosure</span>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Verifier <span className="text-base font-normal text-neutral-500">· disclosure review</span>
         </h1>
-        <p className="mt-1 text-sm text-neutral-400">
-          This page is for the curious counterparty — a tax office, a compliance desk, or anyone
-          an account holder owes exactly one answer to. You ask them to prove one fact about one
-          on-chain transfer; unlike the auditor, you hold no master key and learn nothing they
-          don&apos;t explicitly prove to you. No wallet needed — this page reads the chain,
-          verifies the proof against the shared circuit artifacts, and decrypts the amount sealed
-          to your key. Nothing here is published anywhere.
+        <p className="mt-2 text-sm leading-relaxed text-neutral-400">
+          For a verifying counterparty (a compliance desk, tax authority, or KYC provider) that
+          needs proof of a single fact about one on-chain transfer. You hold no key into the system
+          and learn nothing beyond what is explicitly proved to you. No wallet required: this page
+          reads the chain, verifies the proof against the shared circuit artifacts, and decrypts the
+          amount sealed to your key. Nothing here is published.
         </p>
       </header>
 
       <div className="space-y-6">
         <section className="rounded border border-neutral-800 p-4">
-          <h3 className="mb-1 font-medium">1 · Your disclosure request</h3>
+          <h3 className="mb-1 font-medium"><span className="text-cyan-400">1</span> · Your disclosure request</h3>
           <p className="mb-3 text-xs text-neutral-400">
             Hand this to the account holder (they paste it on the wallet page under
             &ldquo;Disclose amount&rdquo;). The nonce <code>nu</code> is one-time: a proof bound to it
@@ -174,14 +173,14 @@ export default function VerifyPage() {
           {request && (
             <textarea
               readOnly
-              className="mt-3 h-28 w-full rounded border border-neutral-800 bg-black/40 p-2 font-mono text-xs text-neutral-300"
+              className="mt-3 h-28 w-full rounded border border-neutral-800 bg-neutral-500/10 p-2 font-mono text-xs text-neutral-300"
               value={JSON.stringify(request, null, 2)}
             />
           )}
         </section>
 
         <section className="rounded border border-neutral-800 p-4">
-          <h3 className="mb-1 font-medium">2 · Verify the holder&apos;s bundle</h3>
+          <h3 className="mb-1 font-medium"><span className="text-cyan-400">2</span> · Verify the holder&apos;s bundle</h3>
           <p className="mb-3 text-xs text-neutral-400">
             Paste the bundle the holder sent back. The event payload, the disclosing account&apos;s
             key, and the contract binding are all re-read from the chain — never trusted from
@@ -196,13 +195,13 @@ export default function VerifyPage() {
           <button
             onClick={verify}
             disabled={busy || !request || !bundleJson.trim()}
-            className="mt-2 rounded bg-emerald-600 px-4 py-2 font-medium hover:bg-emerald-500 disabled:opacity-50"
+            className="mt-2 rounded bg-indigo-600 px-4 py-2 font-medium hover:bg-indigo-500 disabled:opacity-50"
           >
             {busy ? "Verifying…" : "Verify against chain"}
           </button>
           {!request && (
             <p className="mt-2 text-xs text-amber-400">
-              Create a request first — a bundle can only be verified against the (P_R, ν) it was
+              Create a request first. A bundle can only be verified against the (P_R, ν) it was
               produced for.
             </p>
           )}
@@ -256,10 +255,9 @@ export default function VerifyPage() {
         )}
       </div>
 
-      <footer className="mt-10 text-xs text-neutral-600">
-        circuits <span className="font-mono">disclose_recipient · disclose_sender</span> · VKs
-        pinned from @ctd/disclosure · token {DEPLOYMENT.contracts.token.slice(0, 4)}…
-        {DEPLOYMENT.contracts.token.slice(-4)}
+      <footer className="mt-10 font-mono text-xs text-neutral-600">
+        circuits disclose_recipient · disclose_sender · VKs pinned from @ctd/disclosure · token{" "}
+        {DEPLOYMENT.contracts.token.slice(0, 4)}…{DEPLOYMENT.contracts.token.slice(-4)}
       </footer>
     </main>
   );

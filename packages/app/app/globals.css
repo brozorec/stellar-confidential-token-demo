@@ -2,10 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: dark;
-}
+/* color-scheme is set per theme by the inversion plugin (:root = light, .dark = dark). */
 
 body {
   @apply bg-neutral-950 text-neutral-100 antialiased;
+}
+
+@layer base {
+  /* OZ brand indigo for selection + focus, for an institutional, accessible feel. */
+  ::selection {
+    background-color: rgb(99 102 241 / 0.32);
+  }
+
+  *:focus-visible {
+    outline: 2px solid rgb(99 102 241 / 0.7);
+    outline-offset: 2px;
+  }
 }

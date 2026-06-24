@@ -85,7 +85,7 @@ function EventRow({ ev, wallet }: { ev: ConfidentialEvent; wallet: ConfidentialW
     direction === "received" || (direction === "sent" && wallet.canDiscloseSent(ev as TransferEvent));
 
   return (
-    <li className="rounded border border-neutral-900 bg-black/30 p-3">
+    <li className="rounded border border-neutral-900 bg-neutral-500/10 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className={`rounded px-2 py-0.5 text-xs font-medium ${badgeCls(ev.type, direction)}`}>
           {direction ?? ev.type}
@@ -178,7 +178,7 @@ function DiscloseFlow({
         <div className="space-y-2">
           <textarea
             readOnly
-            className="h-32 w-full rounded border border-neutral-800 bg-black/40 p-2 font-mono text-xs text-neutral-300"
+            className="h-32 w-full rounded border border-neutral-800 bg-neutral-500/10 p-2 font-mono text-xs text-neutral-300"
             value={bundleJson}
           />
           <CopyButton label="Copy bundle" payload={() => bundleJson} />
