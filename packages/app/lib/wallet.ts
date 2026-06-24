@@ -31,7 +31,8 @@ import {
   submitMerge,
   submitWithdraw,
   submitTransfer,
-  fetchEvents,
+  IndexerClient,
+  hybridFetchEvents,
   proveRecipientDisclosure,
   proveSenderDisclosure,
   deriveEphemeralRE,
@@ -79,6 +80,8 @@ export interface WalletView {
 
 export class ConfidentialWallet {
   private provers = new Map<CircuitName, CircuitProver>();
+  /** In-flight full-history fetch shared by concurrent callers (see fetchAllEvents). */
+  private inFlightEvents: Promise<ConfidentialEvent[]> | null = null;
 
   private constructor(
     readonly address: string,
@@ -86,6 +89,7 @@ export class ConfidentialWallet {
     private keys: KeyPair,
     private client: ChainClient,
     private engine: StateEngine,
+    private indexer: IndexerClient | undefined,
     private log: Log,
   ) {}
 
@@ -117,19 +121,18 @@ export class ConfidentialWallet {
     }
     const keys = deriveKeys(sk, addrF);
 
-    // The first sync starts from the deploy ledger, but `getEvents` only serves
-    // ~7 days of ledgers and REJECTS a startLedger older than its window. Once
-    // the deployment ages past retention, an unclamped start makes every sync
-    // throw on connect. Clamp to the RPC's oldest retained ledger so a stale
-    // deployment degrades to "no events" instead — registration status is read
-    // from on-chain state in refresh(), not reconstructed from events.
-    let fromLedger: number = DEPLOYMENT.deployedAtLedger;
-    try {
-      const health = await client.server.getHealth();
-      if (health.oldestLedger) fromLedger = Math.max(fromLedger, health.oldestLedger + 1);
-    } catch {
-      // health endpoint variations are non-fatal; fall back to the deploy ledger
-    }
+    // Optional Goldsky indexer: when configured, the hybrid event source
+    // backfills history older than the RPC's ~7-day window. Without it the app
+    // is RPC-only (today's behavior).
+    const indexer = DEPLOYMENT.indexerUrl
+      ? new IndexerClient({ baseUrl: DEPLOYMENT.indexerUrl })
+      : undefined;
+    if (indexer) log(`indexer configured (${DEPLOYMENT.indexerUrl})`);
+
+    // Start from the deploy ledger, unclamped: hybridFetchEvents clamps the RPC
+    // leg to the retention window itself and routes anything older to the
+    // indexer (if present), so a stale deployment no longer makes sync throw.
+    const fromLedger: number = DEPLOYMENT.deployedAtLedger;
 
     const engine = new StateEngine({
       client,
@@ -137,9 +140,10 @@ export class ConfidentialWallet {
       keys,
       address: signer.publicKey,
       fromLedger,
+      indexer,
     });
 
-    return new ConfidentialWallet(signer.publicKey, signer, keys, client, engine, log);
+    return new ConfidentialWallet(signer.publicKey, signer, keys, client, engine, indexer, log);
   }
 
   private prover(name: CircuitName): CircuitProver {
@@ -226,10 +230,9 @@ export class ConfidentialWallet {
   }
 
   /**
-   * This account's token-contract events still inside the RPC's ~7-day
-   * retention window, newest first. Start is clamped to the RPC's oldest
-   * retained ledger so a deployment older than the window doesn't make
-   * `getEvents` reject.
+   * This account's token-contract events, newest first. With an indexer
+   * configured this spans the full history; otherwise it is limited to the
+   * RPC's ~7-day retention window.
    */
   async listEvents(): Promise<ConfidentialEvent[]> {
     const events = await this.fetchAllEvents();
@@ -237,9 +240,9 @@ export class ConfidentialWallet {
   }
 
   /**
-   * Other accounts with a `register` event still inside the RPC retention
-   * window — the demo's only way to enumerate possible transfer recipients
-   * (no indexer). An account registered more than ~7 days ago won't appear.
+   * Other accounts with a `register` event — the way to enumerate possible
+   * transfer recipients. With an indexer this covers the full history; without
+   * one, an account registered more than ~7 days ago won't appear.
    */
   async registeredRecipients(): Promise<string[]> {
     const seen = new Set<string>();
@@ -249,16 +252,29 @@ export class ConfidentialWallet {
     return [...seen];
   }
 
+  /**
+   * Full token-event history (indexer + RPC), the source for both the activity
+   * list and recipient discovery.
+   *
+   * Single-flight: `listEvents()` and `registeredRecipients()` both run a
+   * full-history scan and fire near-simultaneously on connect. Concurrent
+   * callers share ONE in-flight fetch; the moment it settles the slot is
+   * cleared, so any LATER call (the activity panel's Reload, a post-tx refresh,
+   * the recipients refresh button) re-fetches and picks up new events —
+   * including ones from other accounts. This only de-duplicates overlapping
+   * requests; it never serves stale data, so there is no cache to invalidate.
+   */
   private async fetchAllEvents(): Promise<ConfidentialEvent[]> {
-    let start: number = DEPLOYMENT.deployedAtLedger;
+    if (this.inFlightEvents) return this.inFlightEvents;
+    const fetch = hybridFetchEvents(this.client, this.indexer, {
+      fromLedger: DEPLOYMENT.deployedAtLedger,
+    }).then((r) => r.events);
+    this.inFlightEvents = fetch;
     try {
-      const health = await this.client.server.getHealth();
-      if (health.oldestLedger) start = Math.max(start, health.oldestLedger + 1);
-    } catch {
-      // health endpoint variations are non-fatal; fall back to deploy ledger
+      return await fetch;
+    } finally {
+      this.inFlightEvents = null;
     }
-    const { events } = await fetchEvents(this.client, { startLedger: start });
-    return events;
   }
 
   private concernsMe(ev: ConfidentialEvent): boolean {

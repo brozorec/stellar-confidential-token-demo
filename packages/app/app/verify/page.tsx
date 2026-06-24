@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ChainClient,
+  IndexerClient,
   CircuitProver,
   proverFromArtifact,
   generateRecipientKeys,
@@ -103,12 +104,18 @@ export default function VerifyPage() {
         networkPassphrase: DEPLOYMENT.networkPassphrase,
         contracts: DEPLOYMENT.contracts,
       });
+      // With an indexer, ref_E resolves even for transfers older than the RPC's
+      // ~7-day window (verifyDisclosure tries the indexer first, then the RPC).
+      const indexer = DEPLOYMENT.indexerUrl
+        ? new IndexerClient({ baseUrl: DEPLOYMENT.indexerUrl })
+        : undefined;
       const artifacts = ARTIFACTS[bundle.circuitId];
       const prover: CircuitProver = proverFromArtifact(artifacts.circuit as never);
       try {
         setResult(
           await verifyDisclosure({
             client,
+            indexer,
             bundle,
             request,
             keys,

@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ConfidentialEvent, TransferEvent, DisclosureRequest } from "@ctd/sdk";
 import type { ConfidentialWallet } from "@/lib/wallet";
+import { DEPLOYMENT } from "@/lib/deployment";
 import { errMsg } from "@/lib/err";
 import { CopyButton } from "../copy-button";
 
@@ -53,8 +54,8 @@ export function EventsPanel({ wallet, reloadKey = 0 }: { wallet: ConfidentialWal
         </button>
       </div>
       <p className="mb-3 text-xs text-neutral-400">
-        Events involving your account (~7-day RPC retention). Disclose a transfer to prove its
-        amount to a third party — as its receiver or as its sender.
+        Events involving your account ({DEPLOYMENT.indexerUrl ? "full history via indexer" : "~7-day RPC retention"}).
+        Disclose a transfer to prove its amount to a third party — as its receiver or as its sender.
       </p>
       {error && <div className="mb-3 rounded border border-red-800 bg-red-950/40 p-2 text-xs text-red-300">{error}</div>}
       {events && events.length === 0 && (

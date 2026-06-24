@@ -104,28 +104,36 @@ artifacts out-of-band — that agreement is the trust anchor of the off-chain
 protocol. See its [README](packages/disclosure/README.md) for the file-by-file
 breakdown; rebuild artifacts with `pnpm build:disclosure`.
 
-## The central trade-off: RPC-only, 7-day retention
+## The central trade-off: RPC retention vs. indexer history
 
-This demo has **no indexer**. Client state is reconstructed straight from the
-Soroban RPC `getEvents` API. But the protocol's spendable secrets (`v`, `r`)
-live **only in events** — the chain stores commitments, not openings. The RPC
-serves only ~7 days of history (testnet `ledgerRetentionWindow` ≈ 120 960
-ledgers).
+The protocol's spendable secrets (`v`, `r`) live **only in events** — the chain
+stores commitments, not openings. The Soroban RPC `getEvents` API serves only
+~7 days of history (testnet `ledgerRetentionWindow` ≈ 120 960 ledgers), so it
+alone can't reconstruct older state.
+
+The client reads events from a **hybrid source** (`chain/event-source.ts`):
+
+- **RPC** for the recent tail — low latency, sees a just-submitted tx
+  immediately.
+- An optional **Goldsky indexer** (`packages/indexer/`) for the portion older
+  than the RPC window — durable, full deployment history. The RPC always owns
+  the tip; the indexer is queried only for the pre-window backfill, so warm
+  syncs stay pure-RPC. Set `NEXT_PUBLIC_INDEXER_URL` to enable it; unset, the
+  app runs RPC-only.
 
 Consequences, handled deliberately:
 
 - The state engine **persists decrypted openings locally** and tracks a sync
-  cursor. Local persistence is therefore *load-bearing for correctness*, not
-  just speed.
+  cursor. With RPC alone, local persistence is *load-bearing for correctness*;
+  with an indexer, a fresh client can also rebuild from full history.
 - You **recover your spendable balance** from the most recent withdraw/transfer
   event's `b_tilde`+`sigma` alone (it encodes the resulting value), so a regular
   spender is robust within the window.
-- The **receiving balance is a running sum**: if an incoming-transfer event
-  ages out before you sync, that credit's opening is unrecoverable (the funds
-  can still be `merge`d, but the post-merge spendable value is then unknown).
-  **Sync at least once per retention period.** A production system would run an
-  indexer or archive events; this demo intentionally does not, to show the bare
-  RPC model and its limits.
+- The **receiving balance is a running sum**: with RPC only, if an
+  incoming-transfer event ages out before you sync, that credit's opening is
+  unrecoverable — so **sync at least once per retention period**. A configured
+  indexer keeps those crediting events available indefinitely, lifting this
+  limit (and giving the auditor and old-disclosure verification full history).
 
 `StateEngine.verifyAgainstChain()` re-commits the local openings and checks them
 against the on-chain commitments, so divergence is detected, never silently

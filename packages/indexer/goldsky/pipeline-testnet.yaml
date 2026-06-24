@@ -1,0 +1,42 @@
+name: confidential-token-testnet
+apiVersion: 3
+sources:
+  stellar_testnet_events:
+    type: dataset
+    dataset_name: stellar_testnet.events
+    version: 1.2.0
+    start_at: 3013364
+transforms:
+  token_events:
+    type: sql
+    sql: |
+      SELECT
+        id,
+        contract_id,
+        ledger_sequence AS ledger,
+        ledger_closed_at,
+        transaction_hash AS tx_hash,
+        transaction_index,
+        CAST(NULL AS INT) AS operation_index,
+        topics AS topic,
+        data AS `value`
+      FROM stellar_testnet_events
+      WHERE transaction_successful = TRUE
+        AND in_successful_contract_call = TRUE
+        AND contract_id = 'CBF64DEOVQAXJFBSNGFEUT2AH4H7K5JBY3ZYJ5GVEINMNSDISWRG5N3F'
+        AND JSON_VALUE(topics, '$[0].symbol') IN (
+          'register',
+          'deposit',
+          'merge',
+          'withdraw',
+          'transfer'
+        )
+    primary_key: id
+sinks:
+  raw_events:
+    type: postgres
+    from: token_events
+    table: raw_events
+    schema: public
+    secret_name: INDEXER_POSTGRES_CREDENTIALS
+    primary_key: id

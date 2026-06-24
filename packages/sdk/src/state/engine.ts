@@ -1,9 +1,11 @@
 /**
- * RPC-only state reconstruction.
+ * State reconstruction from the contract event stream.
  *
  * Replays confidential-token events to recover the local openings (`v`, `r`) of
  * an account's spendable and receiving balances — the secrets needed to build
- * the next proof. There is no indexer; events come straight from `getEvents`.
+ * the next proof. Events come from the hybrid source (`chain/event-source.ts`):
+ * the RPC `getEvents` API for the recent tail, plus an optional Goldsky indexer
+ * for history older than the RPC's ~7-day retention window.
  *
  * Reconstruction rules (owner = `state.address`):
  *   - register(me)        → mark registered.
@@ -16,10 +18,11 @@
  * Why the spendable rule needs no history: withdraw/transfer emit
  * `b_tilde = v_new + Poseidon2(ENC_BAL, vk, sigma)`, so the owner reads the
  * resulting spendable value straight from the event. The receiving balance,
- * however, is a running sum — its openings are only recoverable while the
- * crediting events remain within the RPC retention window. Hence persistence:
- * sync at least once per retention period or risk an unspendable receiving
- * balance.
+ * however, is a running sum — every crediting event must be replayed. With
+ * RPC alone those openings are only recoverable inside the ~7-day window, so a
+ * client must persist state and sync at least once per retention period. A
+ * configured indexer lifts this: crediting events stay available for the full
+ * history, so a fresh client can reconstruct the receiving balance from scratch.
  */
 
 import { commit, ecdh, type Point } from "../crypto/grumpkin.js";
@@ -28,7 +31,9 @@ import { DOMAIN } from "../crypto/constants.js";
 import { deriveSpendR, deriveTxBlind, poseidonWithDomain } from "../crypto/poseidon2.js";
 import type { KeyPair } from "../crypto/keys.js";
 import type { ChainClient } from "../chain/client.js";
-import { fetchEvents, type ConfidentialEvent } from "../chain/events.js";
+import { type ConfidentialEvent } from "../chain/events.js";
+import { hybridFetchEvents } from "../chain/event-source.js";
+import type { IndexerClient } from "../chain/indexer.js";
 import type { StateStore } from "./store.js";
 import { freshState, type AccountState, type Opening } from "./types.js";
 
@@ -39,8 +44,18 @@ export interface StateEngineConfig {
   keys: KeyPair;
   /** Owner's Stellar (G-) address (for event direction). */
   address: string;
-  /** Ledger to start the FIRST sync from (e.g. the contract deploy ledger). */
+  /**
+   * Ledger to start the FIRST sync from (e.g. the contract deploy ledger).
+   * When an {@link indexer} is provided this may predate the RPC retention
+   * window — the hybrid source backfills the gap from the indexer.
+   */
   fromLedger: number;
+  /**
+   * Optional Goldsky indexer for full-history backfill below the RPC's ~7-day
+   * window. When omitted, sync is RPC-only (the original behavior): events
+   * older than retention are unavailable.
+   */
+  indexer?: IndexerClient;
 }
 
 export class StateEngine {
@@ -107,10 +122,11 @@ export class StateEngine {
     const prior = await this.cfg.store.load(this.cfg.address);
     const state = prior ?? freshState(this.cfg.address);
 
-    const { events, cursor, latestLedger } = await fetchEvents(this.cfg.client, {
-      startCursor: state.cursor,
-      startLedger: state.cursor ? undefined : this.cfg.fromLedger,
-    });
+    const { events, cursor, latestLedger } = await hybridFetchEvents(
+      this.cfg.client,
+      this.cfg.indexer,
+      { fromLedger: this.cfg.fromLedger, startCursor: state.cursor },
+    );
 
     for (const ev of events) this.apply(state, ev);
     if (cursor) state.cursor = cursor;

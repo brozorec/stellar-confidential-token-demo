@@ -1,0 +1,12 @@
+name = "confidential-token-indexer"
+main = "handler/src/index.ts"
+compatibility_date = "2025-01-15"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[vars]
+INDEXER_NETWORK = "testnet"
+
+# Secrets (set with `wrangler secret put <NAME>`):
+#   DATABASE_URL   Postgres connection string the Goldsky sink writes to
+#   CORS_ORIGIN    (optional) allowed origin; defaults to "*"

@@ -12,6 +12,13 @@ import { Networks } from "@stellar/stellar-sdk";
 export const DEPLOYMENT = {
   rpcUrl: "https://soroban-testnet.stellar.org",
   networkPassphrase: Networks.TESTNET,
+  /**
+   * Optional Goldsky indexer (see packages/indexer/). When set, the app uses it
+   * to backfill events older than the RPC's ~7-day retention window; when unset
+   * the app runs RPC-only (events older than retention are unavailable). Read
+   * at build time from NEXT_PUBLIC_INDEXER_URL.
+   */
+  indexerUrl: process.env.NEXT_PUBLIC_INDEXER_URL || undefined,
   /** Ledger the token was deployed at — the first-sync start point. */
   deployedAtLedger: 3013364,
   /** All accounts in this demo register under this auditor id. */

@@ -18,7 +18,9 @@ import { fromHex, toHex32, hexToBytes } from "../crypto/field.js";
 import { addressToField } from "../crypto/address.js";
 import { pointCoords } from "../crypto/grumpkin.js";
 import type { ChainClient } from "../chain/client.js";
-import { resolveEventRef, type TransferEvent } from "../chain/events.js";
+import { type TransferEvent } from "../chain/events.js";
+import { hybridResolveEventRef } from "../chain/event-source.js";
+import type { IndexerClient } from "../chain/indexer.js";
 import type { CircuitProver } from "../proving/prover.js";
 import {
   DISCLOSE_SENDER_CIRCUIT_ID,
@@ -76,8 +78,14 @@ export async function verifyDisclosure(params: {
    * audited circuit" agreement made checkable.
    */
   pinnedVk?: Uint8Array;
+  /**
+   * Optional Goldsky indexer. When given, `ref_E` is resolved via the indexer
+   * first (so disclosures of transfers older than the RPC's ~7-day window still
+   * verify), falling back to the RPC.
+   */
+  indexer?: IndexerClient;
 }): Promise<VerifiedDisclosure> {
-  const { client, bundle, request, keys, prover, pinnedVk } = params;
+  const { client, bundle, request, keys, prover, pinnedVk, indexer } = params;
   const steps: string[] = [];
 
   if (!DISCLOSURE_CIRCUIT_IDS.includes(bundle.circuitId)) {
@@ -103,11 +111,11 @@ export async function verifyDisclosure(params: {
   }
 
   // §5.3 step 1 — resolve ref_E to exactly one token-contract event.
-  const event = await resolveEventRef(client, bundle.refE);
+  const event = await hybridResolveEventRef(client, indexer, bundle.refE);
   if (!event) {
     throw new DisclosureVerifyError(
       "resolve-event",
-      `ref_E does not resolve to a token-contract event (ledger ${bundle.refE.ledger}, id ${bundle.refE.id}) — wrong reference, or outside the RPC's ~7-day retention window`,
+      `ref_E does not resolve to a token-contract event (ledger ${bundle.refE.ledger}, id ${bundle.refE.id}) — wrong reference${indexer ? "" : ", or outside the RPC's ~7-day retention window"}`,
     );
   }
   if (event.type !== "transfer") {

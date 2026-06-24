@@ -19,7 +19,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ChainClient,
-  fetchEvents,
+  IndexerClient,
+  hybridFetchEvents,
   auditTransfer,
   auditWithdraw,
   auditorPublicKey,
@@ -154,6 +155,7 @@ export default function AuditorPage() {
   const [error, setError] = useState<string | null>(null);
 
   const kAud = pointCoords(auditorPublicKey(AUDITOR_SK));
+  const hasIndexer = !!DEPLOYMENT.indexerUrl;
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -164,15 +166,15 @@ export default function AuditorPage() {
         networkPassphrase: DEPLOYMENT.networkPassphrase,
         contracts: DEPLOYMENT.contracts,
       });
-      // Clamp to the RPC's oldest retained ledger, like the wallet does.
-      let start: number = DEPLOYMENT.deployedAtLedger;
-      try {
-        const health = await client.server.getHealth();
-        if (health.oldestLedger) start = Math.max(start, health.oldestLedger + 1);
-      } catch {
-        // non-fatal; fall back to the deploy ledger
-      }
-      const { events } = await fetchEvents(client, { startLedger: start });
+      // Hybrid source: the indexer (when configured) backfills the full history
+      // below the RPC's ~7-day window — exactly what an auditor needs. The RPC
+      // leg is clamped to the retention boundary internally.
+      const indexer = DEPLOYMENT.indexerUrl
+        ? new IndexerClient({ baseUrl: DEPLOYMENT.indexerUrl })
+        : undefined;
+      const { events } = await hybridFetchEvents(client, indexer, {
+        fromLedger: DEPLOYMENT.deployedAtLedger,
+      });
       const result = replay(events);
       setRows(result.rows);
       setAccounts(result.accounts);
@@ -240,8 +242,10 @@ export default function AuditorPage() {
           </div>
           <p className="mb-3 text-xs text-neutral-400">
             Reconstructed from sender-channel balance checkpoints and decrypted inbound credits
-            (DESIGN.md §8.1). Only events inside the RPC&apos;s ~7-day retention window are
-            available — accounts with older history may be incomplete.
+            (DESIGN.md §8.1).{" "}
+            {hasIndexer
+              ? "Backed by the Goldsky indexer, so the full deployment history is decrypted."
+              : "Only events inside the RPC's ~7-day retention window are available — accounts with older history may be incomplete."}
           </p>
           {accounts.length === 0 && !busy && (
             <p className="text-sm text-neutral-500">No accounts in the retention window.</p>
@@ -273,9 +277,9 @@ export default function AuditorPage() {
         <section className="rounded border border-neutral-800 p-4">
           <h3 className="mb-1 font-medium">Decrypted activity</h3>
           <p className="mb-3 text-xs text-neutral-400">
-            Every token-contract event in the retention window, newest first. Amounts the wallet
-            page shows as &ldquo;confidential&rdquo; appear here in cleartext — decrypted with your
-            key alone.
+            Every token-contract event {hasIndexer ? "since deployment" : "in the retention window"},
+            newest first. Amounts the wallet page shows as &ldquo;confidential&rdquo; appear here in
+            cleartext — decrypted with your key alone.
           </p>
           {error && (
             <div className="mb-3 rounded border border-red-800 bg-red-950/40 p-2 text-xs text-red-300">{error}</div>

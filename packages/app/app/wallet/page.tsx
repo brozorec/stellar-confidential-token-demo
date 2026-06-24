@@ -305,7 +305,11 @@ export default function Page() {
             disabled={busy !== null}
             className="text-sm text-neutral-400 underline hover:text-neutral-200 disabled:opacity-50"
           >
-            {busy === "refresh" ? "Syncing…" : "Sync from RPC events"}
+            {busy === "refresh"
+              ? "Syncing…"
+              : DEPLOYMENT.indexerUrl
+                ? "Sync events (RPC + indexer)"
+                : "Sync from RPC events"}
           </button>
         </div>
       )}
@@ -314,7 +318,7 @@ export default function Page() {
 
       <footer className="mt-10 text-xs text-neutral-600">
         token {short(DEPLOYMENT.contracts.token)} · verifier {short(DEPLOYMENT.contracts.verifier)} · auditor{" "}
-        {short(DEPLOYMENT.contracts.auditor)}
+        {short(DEPLOYMENT.contracts.auditor)} · events {DEPLOYMENT.indexerUrl ? "RPC + indexer" : "RPC only"}
       </footer>
     </main>
   );
