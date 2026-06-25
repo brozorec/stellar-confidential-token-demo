@@ -1,12 +1,21 @@
 -- Postgres schema for the confidential-token indexer.
 --
 -- The Goldsky sink upserts one row per matching contract event into raw_events.
--- The pipeline does NOT filter by contract id (so it survives demo redeploys),
--- so this table holds events from ANY testnet contract emitting our event
--- symbols; the Worker filters by contract_id on read. `topic` / `value` are the
--- Goldsky JSON of the ScVal topics array and the event data map — the Worker
--- passes them through untouched and the SDK decodes them (parity with the RPC
--- XDR decoder). The generated columns below are read-side query helpers only.
+-- The pipeline filters by event SHAPE, not by a hardcoded contract id (see
+-- goldsky/pipeline-testnet.yaml): it captures the confidential-token event
+-- family emitted by ANY contract, matched by event shape: `transfer`/`withdraw`
+-- by the `sigma` ciphertext field (so the SAC / SEP-41 transfer firehose, also a
+-- Map of {amount, to_muxed_id}, is excluded); `deposit` by the [from, to] topic
+-- shape plus an `amount` field; `merge` by the [account] topic plus empty data;
+-- `register` by the [account] topic plus an `auditor_id` field. That is
+-- deliberate: every instance is indexed
+-- automatically, including ones a user
+-- deploys in advanced mode without write access to this database. The Worker
+-- then scopes reads to a single contract_id, so this table may hold a few
+-- unrelated contracts' events but the read API never serves them. `topic` /
+-- `value` are the Goldsky JSON of the ScVal topics array and the event data map
+-- — the Worker passes them through untouched and the SDK decodes them (parity
+-- with the RPC XDR decoder). The generated columns below are read-side helpers.
 
 CREATE TABLE IF NOT EXISTS raw_events (
   id TEXT PRIMARY KEY,

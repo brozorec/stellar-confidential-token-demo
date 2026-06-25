@@ -23,13 +23,51 @@ transforms:
       FROM stellar_testnet_events
       WHERE transaction_successful = TRUE
         AND in_successful_contract_call = TRUE
-        AND contract_id = 'CBF64DEOVQAXJFBSNGFEUT2AH4H7K5JBY3ZYJ5GVEINMNSDISWRG5N3F'
-        AND JSON_VALUE(topics, '$[0].symbol') IN (
-          'register',
-          'deposit',
-          'merge',
-          'withdraw',
-          'transfer'
+        -- Match the confidential-token event *family* by shape, NOT by a
+        -- hardcoded contract id. Every instance is indexed automatically: the
+        -- demo's own deploy AND any contract a user deploys in "advanced mode",
+        -- with no per-deployment registration and no DB write. The Worker still
+        -- scopes reads to a single contract_id, so any unrelated contract that
+        -- slips through this filter is dropped on read.
+        AND (
+          -- register: confidential shape is [register, account] carrying an
+          -- `auditor_id` field.
+          (
+            JSON_VALUE(topics, '$[0].symbol') = 'register'
+            AND JSON_VALUE(topics, '$[1].address') IS NOT NULL
+            AND JSON_VALUE(topics, '$[2].address') IS NULL
+            AND data LIKE '%auditor%'
+          )
+          OR (
+            -- transfer/withdraw collide with the SAC / SEP-41 firehose (which is
+            -- ALSO Map-format: data = {amount, to_muxed_id}). Identify the
+            -- confidential family POSITIVELY by a ciphertext field every
+            -- confidential transfer and withdraw carries — `sigma`. It cannot
+            -- occur in a SAC/SEP-41 event, nor inside hex bytes / i128 / base32
+            -- addresses, so this is a clean substring test.
+            JSON_VALUE(topics, '$[0].symbol') IN ('transfer', 'withdraw')
+            AND data LIKE '%sigma%'
+          )
+          OR (
+            -- deposit: confidential shape is [deposit, from, to] (a second
+            -- address topic) carrying an `amount` field. Excludes foreign
+            -- `deposit` events with a different arity or fields (vault deposits,
+            -- single-arg deposits, multi-field budgeting apps seen on testnet).
+            JSON_VALUE(topics, '$[0].symbol') = 'deposit'
+            AND JSON_VALUE(topics, '$[2].address') IS NOT NULL
+            AND data LIKE '%amount%'
+          )
+          OR (
+            -- merge: confidential shape is exactly [merge, account] with NO data
+            -- fields. An empty event Map serializes with no "symbol" key text,
+            -- so `data NOT LIKE '%symbol%'` asserts "carries no fields".
+            JSON_VALUE(topics, '$[0].symbol') = 'merge'
+            AND JSON_VALUE(topics, '$[1].address') IS NOT NULL
+            AND JSON_VALUE(topics, '$[2].address') IS NULL
+            AND data NOT LIKE '%symbol%'
+          )
+          -- All predicates verified against live rows; pinned by
+          -- packages/sdk/test/shape-filter.mjs.
         )
     primary_key: id
 sinks:
