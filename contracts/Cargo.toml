@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["token", "verifier", "auditor"]
+members = ["token", "token_with_compliance", "verifier", "auditor", "factory", "policies/allowlist", "policies/blocklist"]
 
 [workspace.package]
 edition = "2021"

@@ -68,6 +68,13 @@ async function main(): Promise<void> {
   const auditor = deploy(WASM.auditor, ["--admin", deployerPub, "--manager", deployerPub]);
   console.log(`auditor = ${auditor}`);
 
+  // Standalone ownable compliance policies. Independent of the token wiring and
+  // the addr_f parity guard; owner = deployer (only the owner can mutate).
+  const allowlist = deploy(WASM.allowlist, ["--owner", deployerPub]);
+  console.log(`allowlist = ${allowlist}`);
+  const blocklist = deploy(WASM.blocklist, ["--owner", deployerPub]);
+  console.log(`blocklist = ${blocklist}`);
+
   const client = new ChainClient({
     rpcUrl: RPC_URL,
     networkPassphrase: PASSPHRASE,
@@ -136,7 +143,7 @@ async function main(): Promise<void> {
     rpcUrl: RPC_URL,
     passphrase: PASSPHRASE,
     deployedAtLedger: ledgerBeforeToken,
-    contracts: { token, verifier, auditor, underlying },
+    contracts: { token, verifier, auditor, underlying, allowlist, blocklist },
     auditor: {
       id: 0,
       secretHex: toHex32(auditorSecret),
