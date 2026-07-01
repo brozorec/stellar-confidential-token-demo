@@ -76,9 +76,11 @@ async function rpcOldestLedger(client: ChainClient): Promise<number> {
 export async function hybridFetchEvents(
   client: ChainClient,
   indexer: IndexerClient | undefined,
-  opts: { fromLedger: number; startCursor?: string },
+  opts: { fromLedger: number; startCursor?: string; contractId?: string },
 ): Promise<FetchEventsResult> {
-  const tokenId = client.cfg.contracts.token;
+  // Defaults to the token, but the token-admin dashboard passes a policy
+  // (allowlist/blocklist) contract id to read its `user_*` membership events.
+  const tokenId = opts.contractId ?? client.cfg.contracts.token;
   // `next` is the first ledger we still need. Using cursorLedger+1 assumes the
   // previous sync consumed the cursor's ledger in full — true here because
   // fetchEvents pages all the way to the chain head, so a stored cursor only
@@ -115,15 +117,18 @@ export async function hybridFetchEvents(
           `pre-window history before ledger ${seam} is unavailable this sync`,
       );
     }
-    recent = await fetchEvents(client, { startLedger: seam });
+    recent = await fetchEvents(client, { startLedger: seam, contractId: tokenId });
   } else if (opts.startCursor) {
     // Warm path: resume RPC from the stored cursor. Indexer untouched.
-    recent = await fetchEvents(client, { startCursor: opts.startCursor });
+    recent = await fetchEvents(client, { startCursor: opts.startCursor, contractId: tokenId });
   } else {
     // Cold start within (or no) window: RPC only, clamped just inside the
     // retention floor so getEvents can't reject an aged-out startLedger.
     const floor = rpcOldest > 0 ? rpcOldest + 1 : opts.fromLedger;
-    recent = await fetchEvents(client, { startLedger: Math.max(opts.fromLedger, floor) });
+    recent = await fetchEvents(client, {
+      startLedger: Math.max(opts.fromLedger, floor),
+      contractId: tokenId,
+    });
   }
 
   return {

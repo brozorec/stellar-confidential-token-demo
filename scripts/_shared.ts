@@ -42,6 +42,10 @@ export interface Deployment {
     // deployments predating these contracts still parse.
     allowlist?: string;
     blocklist?: string;
+    // Shared token factory for advanced mode, configured at construction with
+    // the child WASM hashes. The app invokes factory.deploy_* to create a
+    // user-configured confidential token. Optional so older deployments parse.
+    factory?: string;
   };
   auditor: { id: number; secretHex: string; keyXHex: string; keyYHex: string };
   addrF: string;

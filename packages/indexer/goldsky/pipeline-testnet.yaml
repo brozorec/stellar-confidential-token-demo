@@ -66,6 +66,25 @@ transforms:
             AND JSON_VALUE(topics, '$[2].address') IS NULL
             AND data NOT LIKE '%symbol%'
           )
+          OR (
+            -- compliance + policy membership events: token_with_compliance emits
+            -- frozen/unfrozen; the allowlist/blocklist policy contracts emit
+            -- user_*. All share the [symbol, account] / empty-Map shape as
+            -- `merge`. The symbol is the snake_case of the soroban
+            -- #[contractevent] struct name, so the allowlist's `UserAllowed`
+            -- struct emits `user_allowed` (NOT `allow`, despite the library
+            -- docstrings). The Worker scopes reads to one contract_id, so a
+            -- foreign [symbol, account] event reusing one of these names is
+            -- dropped on read.
+            JSON_VALUE(topics, '$[0].symbol') IN (
+              'frozen', 'unfrozen',
+              'user_allowed', 'user_disallowed',
+              'user_blocked', 'user_unblocked'
+            )
+            AND JSON_VALUE(topics, '$[1].address') IS NOT NULL
+            AND JSON_VALUE(topics, '$[2].address') IS NULL
+            AND data NOT LIKE '%symbol%'
+          )
           -- All predicates verified against live rows; pinned by
           -- packages/sdk/test/shape-filter.mjs.
         )

@@ -53,6 +53,20 @@ function deploy(wasmPath: string, ctorArgs: string[]): string {
   return id;
 }
 
+/** Install a contract WASM on-chain, returning its 32-byte hash (hex). */
+function upload(wasmPath: string): string {
+  const out = stellar([
+    "contract", "upload",
+    "--wasm", wasmPath,
+    "--source", DEPLOYER,
+    "--network", NETWORK,
+  ]);
+  // The wasm hash is the last non-empty token of stdout (64 hex chars).
+  const hash = out.split(/\s+/).filter(Boolean).pop()!;
+  if (!/^[0-9a-fA-F]{64}$/.test(hash)) throw new Error(`unexpected upload output: ${out}`);
+  return hash.toLowerCase();
+}
+
 async function main(): Promise<void> {
   const deployerPub = publicKey(DEPLOYER);
   console.log(`deployer ${DEPLOYER} = ${deployerPub}`);
@@ -138,12 +152,28 @@ async function main(): Promise<void> {
     console.log(`  addr_f parity OK: ${toHex32(sdkAddrF)}`);
   }
 
+  // 6. Provision the shared token factory for advanced mode. Install the four
+  //    deployable child WASMs and deploy one factory configured with their
+  //    hashes; the browser only invokes factory.deploy_* (it never installs
+  //    WASM). The vanilla-token hash is the same WASM as `token` above.
+  const vanillaWasm = upload(WASM.token);
+  const compliantWasm = upload(WASM.tokenWithCompliance);
+  const allowlistWasm = upload(WASM.allowlist);
+  const blocklistWasm = upload(WASM.blocklist);
+  const factory = deploy(WASM.factory, [
+    "--vanilla_token_wasm", vanillaWasm,
+    "--compliant_token_wasm", compliantWasm,
+    "--allowlist_wasm", allowlistWasm,
+    "--blocklist_wasm", blocklistWasm,
+  ]);
+  console.log(`factory = ${factory}`);
+
   const deployment: Deployment = {
     network: NETWORK,
     rpcUrl: RPC_URL,
     passphrase: PASSPHRASE,
     deployedAtLedger: ledgerBeforeToken,
-    contracts: { token, verifier, auditor, underlying, allowlist, blocklist },
+    contracts: { token, verifier, auditor, underlying, allowlist, blocklist, factory },
     auditor: {
       id: 0,
       secretHex: toHex32(auditorSecret),

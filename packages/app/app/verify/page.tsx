@@ -39,7 +39,7 @@ import discloseRecipientVk from "@ctd/disclosure/artifacts/disclose_recipient.vk
 import discloseSenderCircuit from "@ctd/disclosure/artifacts/disclose_sender.json";
 import discloseSenderVk from "@ctd/disclosure/artifacts/disclose_sender.vk.json";
 
-import { DEPLOYMENT } from "@/lib/deployment";
+import { useActiveDeployment } from "@/lib/active-deployment";
 import { ensureBrowserBackend } from "@/lib/bb-loader";
 import { errMsg } from "@/lib/err";
 import { CopyButton } from "../copy-button";
@@ -61,6 +61,7 @@ function vkBytes(base64: string): Uint8Array {
 }
 
 export default function VerifyPage() {
+  const { active } = useActiveDeployment();
   const [keys, setKeys] = useState<RecipientKeys | null>(null);
   const [request, setRequest] = useState<DisclosureRequest | null>(null);
   const [bundleJson, setBundleJson] = useState("");
@@ -100,14 +101,14 @@ export default function VerifyPage() {
       ensureBrowserBackend();
       const bundle = parseBundle(bundleJson);
       const client = new ChainClient({
-        rpcUrl: DEPLOYMENT.rpcUrl,
-        networkPassphrase: DEPLOYMENT.networkPassphrase,
-        contracts: DEPLOYMENT.contracts,
+        rpcUrl: active.rpcUrl,
+        networkPassphrase: active.networkPassphrase,
+        contracts: active.contracts,
       });
       // With an indexer, ref_E resolves even for transfers older than the RPC's
       // ~7-day window (verifyDisclosure tries the indexer first, then the RPC).
-      const indexer = DEPLOYMENT.indexerUrl
-        ? new IndexerClient({ baseUrl: DEPLOYMENT.indexerUrl })
+      const indexer = active.indexerUrl
+        ? new IndexerClient({ baseUrl: active.indexerUrl })
         : undefined;
       const artifacts = ARTIFACTS[bundle.circuitId];
       const prover: CircuitProver = proverFromArtifact(artifacts.circuit as never);
@@ -132,7 +133,7 @@ export default function VerifyPage() {
     } finally {
       setBusy(false);
     }
-  }, [keys, request, bundleJson]);
+  }, [keys, request, bundleJson, active]);
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
@@ -256,8 +257,8 @@ export default function VerifyPage() {
       </div>
 
       <footer className="mt-10 font-mono text-xs text-neutral-600">
-        circuits disclose_recipient · disclose_sender · VKs pinned from @ctd/disclosure · token{" "}
-        {DEPLOYMENT.contracts.token.slice(0, 4)}…{DEPLOYMENT.contracts.token.slice(-4)}
+        circuits disclose_recipient · disclose_sender · VKs pinned from @ctd/disclosure · {active.label} · token{" "}
+        {active.contracts.token.slice(0, 4)}…{active.contracts.token.slice(-4)}
       </footer>
     </main>
   );
