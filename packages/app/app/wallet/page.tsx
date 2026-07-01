@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ConfidentialWallet, type WalletView, type TxPhase } from "@/lib/wallet";
-import { DEPLOYMENT } from "@/lib/deployment";
+import { useActiveDeployment } from "@/lib/active-deployment";
 import { errMsg } from "@/lib/err";
 import { EventsPanel } from "./events-panel";
 
@@ -49,6 +49,7 @@ const ACTIONS: Record<
 };
 
 export default function Page() {
+  const { active } = useActiveDeployment();
   const [wallet, setWallet] = useState<ConfidentialWallet | null>(null);
   const [view, setView] = useState<WalletView | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
@@ -85,7 +86,7 @@ export default function Page() {
     setError(null);
     setBusy("connecting");
     try {
-      const w = await ConfidentialWallet.connect(log);
+      const w = await ConfidentialWallet.connect(active, log);
       setWallet(w);
       const v = await w.refresh();
       setView(v);
@@ -96,7 +97,18 @@ export default function Page() {
     } finally {
       setBusy(null);
     }
-  }, [log, loadRecipients]);
+  }, [active, log, loadRecipients]);
+
+  // Switching deployment invalidates the connected wallet (different token →
+  // different keys, balances, and event history). Reset so the user reconnects
+  // against the newly-active deployment.
+  useEffect(() => {
+    setWallet(null);
+    setView(null);
+    setRecipients(null);
+    setMergeNotice(null);
+    setError(null);
+  }, [active.contracts.token]);
 
   const run = useCallback(
     (label: string, fn: (w: ConfidentialWallet) => Promise<void>) => async () => {
@@ -306,7 +318,7 @@ export default function Page() {
           >
             {busy === "refresh"
               ? "Syncing…"
-              : DEPLOYMENT.indexerUrl
+              : active.indexerUrl
                 ? "Sync events (RPC + indexer)"
                 : "Sync from RPC events"}
           </button>
@@ -316,8 +328,8 @@ export default function Page() {
       <LogPanel logs={logs} />
 
       <footer className="mt-10 font-mono text-xs text-neutral-600">
-        token {short(DEPLOYMENT.contracts.token)} · verifier {short(DEPLOYMENT.contracts.verifier)} · auditor{" "}
-        {short(DEPLOYMENT.contracts.auditor)} · events {DEPLOYMENT.indexerUrl ? "RPC + indexer" : "RPC only"}
+        {active.label} · token {short(active.contracts.token)} · verifier {short(active.contracts.verifier)} ·
+        auditor {short(active.contracts.auditor)} · events {active.indexerUrl ? "RPC + indexer" : "RPC only"}
       </footer>
     </main>
   );

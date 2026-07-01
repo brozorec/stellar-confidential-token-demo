@@ -50,7 +50,7 @@ import transferCircuit from "@ctd/sdk/circuits/transfer.json";
 import discloseRecipientCircuit from "@ctd/disclosure/artifacts/disclose_recipient.json";
 import discloseSenderCircuit from "@ctd/disclosure/artifacts/disclose_sender.json";
 
-import { DEPLOYMENT } from "./deployment";
+import type { Deployment } from "./deployment";
 import { connectFreighter } from "./freighter";
 import { keyDerivationMessage, skFromSignature } from "./derive-key";
 import { ensureBrowserBackend } from "./bb-loader";
@@ -85,6 +85,7 @@ export class ConfidentialWallet {
 
   private constructor(
     readonly address: string,
+    private deployment: Deployment,
     private signer: Signer,
     private keys: KeyPair,
     private client: ChainClient,
@@ -93,19 +94,23 @@ export class ConfidentialWallet {
     private log: Log,
   ) {}
 
-  static async connect(log: Log): Promise<ConfidentialWallet> {
+  static async connect(deployment: Deployment, log: Log): Promise<ConfidentialWallet> {
     ensureBrowserBackend();
     const signer = await connectFreighter();
     log(`connected ${signer.publicKey}`);
+    log(`deployment: ${deployment.label} (token ${deployment.contracts.token.slice(0, 6)}…)`);
 
     const client = new ChainClient({
-      rpcUrl: DEPLOYMENT.rpcUrl,
-      networkPassphrase: DEPLOYMENT.networkPassphrase,
-      contracts: DEPLOYMENT.contracts,
+      rpcUrl: deployment.rpcUrl,
+      networkPassphrase: deployment.networkPassphrase,
+      contracts: deployment.contracts,
     });
 
-    const addrF = addressToField(DEPLOYMENT.contracts.token);
-    const skKey = `ctd:sk:${DEPLOYMENT.contracts.token}:${signer.publicKey}`;
+    // Keys are token-bound (addr_f domain separation), so a different deployment
+    // derives a different key set and caches under a different localStorage key.
+    const tokenId = deployment.contracts.token;
+    const addrF = addressToField(tokenId);
+    const skKey = `ctd:sk:${tokenId}:${signer.publicKey}`;
     let sk: bigint;
     const stored = localStorage.getItem(skKey);
     if (stored) {
@@ -113,7 +118,7 @@ export class ConfidentialWallet {
     } else {
       log("sign the key-derivation message in Freighter…");
       const signature = await signer.signMessage(
-        keyDerivationMessage(DEPLOYMENT.networkPassphrase, DEPLOYMENT.contracts.token),
+        keyDerivationMessage(deployment.networkPassphrase, tokenId),
       );
       sk = await skFromSignature(signature);
       localStorage.setItem(skKey, toHex32(sk));
@@ -124,26 +129,45 @@ export class ConfidentialWallet {
     // Optional Goldsky indexer: when configured, the hybrid event source
     // backfills history older than the RPC's ~7-day window. Without it the app
     // is RPC-only (today's behavior).
-    const indexer = DEPLOYMENT.indexerUrl
-      ? new IndexerClient({ baseUrl: DEPLOYMENT.indexerUrl })
+    const indexer = deployment.indexerUrl
+      ? new IndexerClient({ baseUrl: deployment.indexerUrl })
       : undefined;
-    if (indexer) log(`indexer configured (${DEPLOYMENT.indexerUrl})`);
+    if (indexer) log(`indexer configured (${deployment.indexerUrl})`);
 
-    // Start from the deploy ledger, unclamped: hybridFetchEvents clamps the RPC
-    // leg to the retention window itself and routes anything older to the
-    // indexer (if present), so a stale deployment no longer makes sync throw.
-    const fromLedger: number = DEPLOYMENT.deployedAtLedger;
+    // State store is namespaced by token address so separate deployments using
+    // the same Freighter account don't corrupt each other's balances. The
+    // pre-namespacing default-deployment cache (`ctd:state:<addr>`) is orphaned;
+    // with the indexer available, the first sync rebuilds full history, so we
+    // just clear the legacy key once to avoid clutter.
+    if (deployment.id === "default") {
+      try {
+        localStorage.removeItem(`ctd:state:${signer.publicKey}`);
+      } catch {
+        /* ignore */
+      }
+    }
 
     const engine = new StateEngine({
       client,
-      store: new LocalStorageStore(),
+      store: new LocalStorageStore(`ctd:state:${tokenId}:`),
       keys,
       address: signer.publicKey,
-      fromLedger,
+      // Start from the deploy ledger, unclamped: hybridFetchEvents clamps the
+      // RPC leg to the retention window and routes anything older to the indexer.
+      fromLedger: deployment.deployedAtLedger,
       indexer,
     });
 
-    return new ConfidentialWallet(signer.publicKey, signer, keys, client, engine, indexer, log);
+    return new ConfidentialWallet(
+      signer.publicKey,
+      deployment,
+      signer,
+      keys,
+      client,
+      engine,
+      indexer,
+      log,
+    );
   }
 
   private prover(name: CircuitName): CircuitProver {
@@ -167,7 +191,7 @@ export class ConfidentialWallet {
     const { proof } = await this.prover("register").prove(w.inputs);
     onPhase?.("submitting");
     this.log("submitting register…");
-    const r = await submitRegister(this.client, this.signer, this.address, DEPLOYMENT.auditorId, w, proof);
+    const r = await submitRegister(this.client, this.signer, this.address, this.deployment.auditorId, w, proof);
     this.log(`registered (tx ${r.hash.slice(0, 10)}…)`);
   }
 
@@ -187,7 +211,7 @@ export class ConfidentialWallet {
     const recipient = await this.client.confidentialBalance(to);
     if (!recipient) throw new Error("recipient is not registered");
     const kAudR = await this.client.auditorKey(recipient.auditorId);
-    const kAudS = await this.client.auditorKey(DEPLOYMENT.auditorId);
+    const kAudS = await this.client.auditorKey(this.deployment.auditorId);
 
     const s = await this.engine.sync();
     if (s.spendable.v < amount) throw new Error(`insufficient spendable balance (${s.spendable.v})`);
@@ -214,7 +238,7 @@ export class ConfidentialWallet {
   }
 
   async withdraw(amount: bigint, onPhase?: (p: TxPhase) => void): Promise<void> {
-    const kAudS = await this.client.auditorKey(DEPLOYMENT.auditorId);
+    const kAudS = await this.client.auditorKey(this.deployment.auditorId);
     const s = await this.engine.sync();
     if (s.spendable.v < amount) throw new Error(`insufficient spendable balance (${s.spendable.v})`);
 
@@ -267,7 +291,7 @@ export class ConfidentialWallet {
   private async fetchAllEvents(): Promise<ConfidentialEvent[]> {
     if (this.inFlightEvents) return this.inFlightEvents;
     const fetch = hybridFetchEvents(this.client, this.indexer, {
-      fromLedger: DEPLOYMENT.deployedAtLedger,
+      fromLedger: this.deployment.deployedAtLedger,
     }).then((r) => r.events);
     this.inFlightEvents = fetch;
     try {
@@ -286,6 +310,10 @@ export class ConfidentialWallet {
       case "withdraw":
       case "transfer":
         return ev.from === this.address || ev.to === this.address;
+      default:
+        // Compliance/policy membership events are surfaced in the admin
+        // dashboard, not the wallet activity list.
+        return false;
     }
   }
 

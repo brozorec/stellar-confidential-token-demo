@@ -14,11 +14,12 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ConfidentialEvent, TransferEvent, DisclosureRequest } from "@ctd/sdk";
 import type { ConfidentialWallet } from "@/lib/wallet";
-import { DEPLOYMENT } from "@/lib/deployment";
+import { useActiveDeployment } from "@/lib/active-deployment";
 import { errMsg } from "@/lib/err";
 import { CopyButton } from "../copy-button";
 
 export function EventsPanel({ wallet, reloadKey = 0 }: { wallet: ConfidentialWallet; reloadKey?: number }) {
+  const { active } = useActiveDeployment();
   const [events, setEvents] = useState<ConfidentialEvent[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +55,7 @@ export function EventsPanel({ wallet, reloadKey = 0 }: { wallet: ConfidentialWal
         </button>
       </div>
       <p className="mb-3 text-xs text-neutral-400">
-        Events involving your account ({DEPLOYMENT.indexerUrl ? "full history via indexer" : "~7-day RPC retention"}).
+        Events involving your account ({active.indexerUrl ? "full history via indexer" : "~7-day RPC retention"}).
         Disclose a transfer to prove its amount to a third party — as its receiver or as its sender.
       </p>
       {error && <div className="mb-3 rounded border border-red-800 bg-red-950/40 p-2 text-xs text-red-300">{error}</div>}
@@ -220,6 +221,9 @@ function summary(ev: ConfidentialEvent, me: string): string {
       return ev.to === me
         ? `from ${who(ev.from)} · amount confidential (ṽ on-chain)`
         : `to ${who(ev.to)} · amount confidential (ṽ on-chain)`;
+    default:
+      // Compliance/policy events are not shown in the wallet activity list.
+      return ev.type;
   }
 }
 

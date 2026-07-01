@@ -9,8 +9,12 @@ import {
 } from "@stellar/freighter-api";
 import type { Signer } from "@ctd/sdk";
 
-import { DEPLOYMENT } from "./deployment";
+import { DEFAULT_DEPLOYMENT } from "./deployment";
 import { errMsg } from "./err";
+
+// The network passphrase is the same for every deployment the app serves
+// (all on testnet), so the signer can use the canonical default's value.
+const NETWORK_PASSPHRASE = DEFAULT_DEPLOYMENT.networkPassphrase;
 
 /** A {@link Signer} that can also sign arbitrary UTF-8 messages (SEP-53). */
 export interface MessageSigner extends Signer {
@@ -31,7 +35,7 @@ export async function connectFreighter(): Promise<MessageSigner> {
     publicKey: address,
     async sign(txXdrBase64: string): Promise<string> {
       const res = await signTransaction(txXdrBase64, {
-        networkPassphrase: DEPLOYMENT.networkPassphrase,
+        networkPassphrase: NETWORK_PASSPHRASE,
         address,
       });
       if (res.error) throw new Error(errMsg(res.error));
@@ -39,7 +43,7 @@ export async function connectFreighter(): Promise<MessageSigner> {
     },
     async signMessage(message: string): Promise<Uint8Array> {
       const res = await freighterSignMessage(message, {
-        networkPassphrase: DEPLOYMENT.networkPassphrase,
+        networkPassphrase: NETWORK_PASSPHRASE,
         address,
       });
       if (res.error) throw new Error(errMsg(res.error));
