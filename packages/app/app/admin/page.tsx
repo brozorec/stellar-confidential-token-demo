@@ -14,6 +14,7 @@
  * page reads the owner publicly; mutations are owner-gated on-chain (#[only_owner]).
  */
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ChainClient,
@@ -31,52 +32,22 @@ import {
 } from "@ctd/sdk";
 import { useActiveDeployment } from "@/lib/active-deployment";
 import { connectFreighter, type MessageSigner } from "@/lib/freighter";
-import { kindLabel } from "@/lib/deployment";
 import { errMsg } from "@/lib/err";
+import { ServingBadge } from "../serving-badge";
+import { Addr } from "../addr";
 
-const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
-
-/** Compact copy-to-clipboard icon button (copies the full string). */
-function CopyAddr({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
+/** Settings cog — marks the redeploy action. */
+function Gear() {
   return (
-    <button
-      type="button"
-      title="Copy address"
-      aria-label="Copy address"
-      onClick={async (e) => {
-        e.stopPropagation();
-        try {
-          await navigator.clipboard.writeText(value);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1200);
-        } catch {
-          /* clipboard unavailable */
-        }
-      }}
-      className="rounded p-0.5 align-middle text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
-    >
-      {copied ? (
-        <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" aria-hidden>
-          <path d="M3.5 8.5 6.5 11.5 12.5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      ) : (
-        <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" aria-hidden>
-          <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
-          <path d="M3.5 10.5 H3 A1.5 1.5 0 0 1 1.5 9 V3 A1.5 1.5 0 0 1 3 1.5 H9 A1.5 1.5 0 0 1 10.5 3 V3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-        </svg>
-      )}
-    </button>
-  );
-}
-
-/** A shortened, monospace address followed by a copy button (copies in full). */
-function Addr({ value }: { value: string }) {
-  return (
-    <span className="inline-flex items-center gap-1 font-mono">
-      {short(value)}
-      <CopyAddr value={value} />
-    </span>
+    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" aria-hidden>
+      <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.3" />
+      <path
+        d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 
@@ -106,7 +77,7 @@ function replaySet(
 }
 
 export default function AdminPage() {
-  const { active } = useActiveDeployment();
+  const { active, which } = useActiveDeployment();
   const isVanilla = active.kind === "vanilla";
   const hasPolicy = active.kind === "allowlist" || active.kind === "blocklist";
 
@@ -236,7 +207,7 @@ export default function AdminPage() {
 
   if (isVanilla) {
     return (
-      <Shell active={active}>
+      <Shell>
         <Notice>
           This deployment is a <b>vanilla</b> token — it has no owner, freeze, or policy, so there
           is no admin dashboard. Switch to (or deploy) a compliant configuration in{" "}
@@ -251,7 +222,7 @@ export default function AdminPage() {
 
   if (!account) {
     return (
-      <Shell active={active}>
+      <Shell>
         <p className="mb-4 text-sm text-neutral-400">
           The admin dashboard requires the token owner&apos;s Freighter account.
         </p>
@@ -269,7 +240,7 @@ export default function AdminPage() {
 
   if (ownerLoaded && !isAdmin) {
     return (
-      <Shell active={active}>
+      <Shell>
         <Notice tone="warn">
           You are connected as <Addr value={account} />, but this token&apos;s admin is{" "}
           {owner ? <Addr value={owner} /> : <span className="font-mono">unknown</span>}. Connect with
@@ -281,7 +252,7 @@ export default function AdminPage() {
 
   if (!ownerLoaded) {
     return (
-      <Shell active={active}>
+      <Shell>
         <p className="text-sm text-neutral-500">Reading token owner…</p>
       </Shell>
     );
@@ -290,13 +261,13 @@ export default function AdminPage() {
   // ---- admin dashboard ----------------------------------------------------
 
   return (
-    <Shell active={active}>
+    <Shell>
       {error && (
         <div className="mb-4 rounded border border-red-800 bg-red-950/40 p-3 text-sm text-red-300">{error}</div>
       )}
       <div className="mb-4 flex items-center justify-between">
         <p className="flex items-center gap-1 text-sm text-neutral-400">
-          Admin <span className="text-neutral-300"><Addr value={account} /></span> · {kindLabel(active.kind)}
+          Admin <span className="text-neutral-300"><Addr value={account} /></span>
         </p>
         <button
           onClick={loadLists}
@@ -412,31 +383,46 @@ export default function AdminPage() {
           />
         )}
       </div>
+
+      {/* Redeploy — start over with a brand-new token. Kept apart from the
+          compliance panels because it replaces the whole deployment, not a
+          setting within it. */}
+      {which === "advanced" && (
+        <section className="mt-8 rounded border border-neutral-800 bg-neutral-900/30 p-4">
+          <h2 className="mb-1 font-medium">Redeploy a new token</h2>
+          <p className="mb-3 text-xs leading-relaxed text-neutral-400">
+            Reconfigure and deploy a brand-new confidential token through the factory. This does
+            not modify the current token — it replaces it as your active advanced deployment, so
+            you start from scratch: no registered accounts, balances, or compliance history carry
+            over, and the account you deploy with becomes the new owner.
+          </p>
+          <Link
+            href="/advanced"
+            className="inline-flex items-center gap-1.5 rounded border border-neutral-700 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:border-neutral-600 hover:bg-neutral-800"
+          >
+            <Gear />
+            Reconfigure &amp; redeploy →
+          </Link>
+        </section>
+      )}
     </Shell>
   );
 }
 
-function Shell({ active, children }: { active: { label: string; kind: string; contracts: { token: string; policy?: string } }; children: React.ReactNode }) {
+function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <header className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">
-          Token Admin <span className="text-base font-normal text-neutral-500">· {active.label}</span>
+          Token admin
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-neutral-400">
           Manage compliance for the active confidential token: registered accounts, freezes, and
           (for allowlist/blocklist configs) policy membership.
         </p>
+        <ServingBadge className="mt-4" />
       </header>
       {children}
-      <footer className="mt-10 flex flex-wrap items-center gap-1 text-xs text-neutral-600">
-        token <Addr value={active.contracts.token} />
-        {active.contracts.policy ? (
-          <>
-            · policy <Addr value={active.contracts.policy} />
-          </>
-        ) : null}
-      </footer>
     </main>
   );
 }

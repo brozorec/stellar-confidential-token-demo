@@ -26,7 +26,7 @@
  */
 
 import { commit, ecdh, type Point } from "../crypto/grumpkin.js";
-import { frAdd, frMod } from "../crypto/field.js";
+import { fpAdd, frMod } from "../crypto/field.js";
 import { DOMAIN } from "../crypto/constants.js";
 import { deriveSpendR, deriveTxBlind, poseidonWithDomain } from "../crypto/poseidon2.js";
 import type { KeyPair } from "../crypto/keys.js";
@@ -87,10 +87,13 @@ export class StateEngine {
         if (ev.to === me) state.receiving.v += ev.amount;
         break;
       case "merge":
+        // Blindings accumulate mod p (the Grumpkin group order), NOT mod r:
+        // the contract merges by point addition, so the resulting commitment
+        // opens to (v_s + v_r, (r_s + r_r) mod p). See fpAdd.
         if (ev.account === me) {
           state.spendable = {
             v: state.spendable.v + state.receiving.v,
-            r: frAdd(state.spendable.r, state.receiving.r),
+            r: fpAdd(state.spendable.r, state.receiving.r),
           };
           state.receiving = { v: 0n, r: 0n };
         }
@@ -106,7 +109,7 @@ export class StateEngine {
           const { vTx, rTx } = this.decryptIncoming(ev.rE, ev.vTilde, ev.sigma);
           state.receiving = {
             v: state.receiving.v + vTx,
-            r: frAdd(state.receiving.r, rTx),
+            r: fpAdd(state.receiving.r, rTx),
           };
         }
         break;

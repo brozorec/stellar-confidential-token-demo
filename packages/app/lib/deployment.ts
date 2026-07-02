@@ -67,7 +67,7 @@ const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL || undefined;
 
 export const DEFAULT_DEPLOYMENT: Deployment = {
   id: "default",
-  label: "Default · vanilla",
+  label: "Default Confidential Token",
   kind: "vanilla",
   rpcUrl: "https://soroban-testnet.stellar.org",
   networkPassphrase: Networks.TESTNET,
@@ -93,13 +93,13 @@ export const XLM_SAC = DEFAULT_DEPLOYMENT.contracts.underlying;
 export function kindLabel(kind: CtKind): string {
   switch (kind) {
     case "vanilla":
-      return "Vanilla (no compliance)";
+      return "Default Confidential Token";
     case "compliance":
-      return "Compliance (freeze only)";
+      return "Confidential Token with compliance (freeze only)";
     case "allowlist":
-      return "Compliance + allowlist";
+      return "Confidential Token with compliance + allowlist policy";
     case "blocklist":
-      return "Compliance + blocklist";
+      return "Confidential Token with compliance + blocklist policy";
   }
 }
 

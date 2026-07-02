@@ -7,6 +7,7 @@ import {
 import { sponge, poseidonWithDomain, vkFromSk } from "../src/crypto/poseidon2.ts";
 import { addressToField } from "../src/crypto/address.ts";
 import { G_X, G_Y, H_X, H_Y, FR_MODULUS } from "../src/crypto/constants.ts";
+import { frAdd, fpAdd } from "../src/crypto/field.ts";
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error("  ✗ " + msg); } };
@@ -19,6 +20,16 @@ ok(!G.equals(H), "G != H");
 // Pedersen homomorphism: commit(a,b)+commit(c,d) == commit(a+c, b+d).
 const c1 = commit(11n, 22n), c2 = commit(33n, 44n);
 ok(c1.add(c2).equals(commit(44n, 66n)), "Pedersen additively homomorphic");
+
+// Blinding accumulation is mod p (the GROUP order), not mod r: when the
+// integer sum of two blindings crosses p, only the mod-p reduction still
+// opens the summed commitment. Reducing mod r instead diverges by p - r
+// (regression: state engine used frAdd here and mismatched on-chain state
+// after any merge of two full-size blindings).
+const rBig1 = FR_MODULUS - 1n, rBig2 = FR_MODULUS - 2n; // sum > p
+const cSum = commit(5n, rBig1).add(commit(7n, rBig2));
+ok(cSum.equals(commit(12n, fpAdd(rBig1, rBig2))), "mod-p blinding sum opens point sum");
+ok(!cSum.equals(commit(12n, frAdd(rBig1, rBig2))), "mod-r blinding sum must NOT open it");
 
 // commit(0,0) is the identity, and round-trips through bytes as 64 zeros.
 ok(isIdentity(commit(0n, 0n)), "commit(0,0) is identity");

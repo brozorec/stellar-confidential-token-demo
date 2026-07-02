@@ -43,6 +43,9 @@ import { useActiveDeployment } from "@/lib/active-deployment";
 import { ensureBrowserBackend } from "@/lib/bb-loader";
 import { errMsg } from "@/lib/err";
 import { CopyButton } from "../copy-button";
+import { ServingBadge } from "../serving-badge";
+import { Addr } from "../addr";
+import { TxLink } from "../tx-link";
 
 const RR_KEY = "ctd:disclosure:rR";
 const REQUEST_KEY = "ctd:disclosure:request";
@@ -139,7 +142,7 @@ export default function VerifyPage() {
     <main className="mx-auto max-w-3xl px-5 py-10">
       <header className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">
-          Verifier <span className="text-base font-normal text-neutral-500">· disclosure review</span>
+          Disclosure receiver
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-neutral-400">
           For a verifying counterparty (a compliance desk, tax authority, or KYC provider) that
@@ -148,6 +151,7 @@ export default function VerifyPage() {
           reads the chain, verifies the proof against the shared circuit artifacts, and decrypts the
           amount sealed to your key. Nothing here is published.
         </p>
+        <ServingBadge className="mt-4" />
       </header>
 
       <div className="space-y-6">
@@ -213,7 +217,7 @@ export default function VerifyPage() {
             <h3 className="mb-1 font-medium text-red-300">Rejected at: {error.stage}</h3>
             <p className="text-sm text-red-300/90">{error.message}</p>
             <p className="mt-2 text-xs text-red-400/70">
-              Per the verifier protocol, nothing may be learned from a bundle that fails any step.
+              Per the disclosure protocol, nothing may be learned from a bundle that fails any step.
             </p>
           </section>
         )}
@@ -226,26 +230,26 @@ export default function VerifyPage() {
               {result.role === "recipient" ? (
                 <>
                   The on-chain transfer{" "}
-                  <span className="font-mono text-xs">{result.event.txHash.slice(0, 10)}…</span>{" "}
+                  <TxLink hash={result.event.txHash} className="text-xs" />{" "}
                   (ledger {result.event.ledger}) paid{" "}
-                  <span className="font-mono text-xs">{result.disclosingAccount.slice(0, 8)}…</span>{" "}
+                  <Addr value={result.disclosingAccount} className="text-xs" />{" "}
                   exactly this amount.
                 </>
               ) : (
                 <>
                   The on-chain transfer{" "}
-                  <span className="font-mono text-xs">{result.event.txHash.slice(0, 10)}…</span>{" "}
+                  <TxLink hash={result.event.txHash} className="text-xs" />{" "}
                   (ledger {result.event.ledger}) was sent by{" "}
-                  <span className="font-mono text-xs">{result.disclosingAccount.slice(0, 8)}…</span>{" "}
+                  <Addr value={result.disclosingAccount} className="text-xs" />{" "}
                   for exactly this amount, to{" "}
-                  <span className="font-mono text-xs">{result.event.to.slice(0, 8)}…</span>.
+                  <Addr value={result.event.to} className="text-xs" />.
                 </>
               )}{" "}
               You learned nothing else about the account, and this proof is useless to anyone but
               you.
             </p>
             <details className="text-xs text-neutral-400">
-              <summary className="cursor-pointer text-neutral-300">Verifier steps</summary>
+              <summary className="cursor-pointer text-neutral-300">Verification steps</summary>
               <ol className="mt-2 list-decimal space-y-1 pl-5">
                 {result.steps.map((s, i) => (
                   <li key={i}>{s}</li>
@@ -255,11 +259,6 @@ export default function VerifyPage() {
           </section>
         )}
       </div>
-
-      <footer className="mt-10 font-mono text-xs text-neutral-600">
-        circuits disclose_recipient · disclose_sender · VKs pinned from @ctd/disclosure · {active.label} · token{" "}
-        {active.contracts.token.slice(0, 4)}…{active.contracts.token.slice(-4)}
-      </footer>
     </main>
   );
 }

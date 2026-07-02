@@ -27,29 +27,30 @@ import {
 import { useActiveDeployment } from "@/lib/active-deployment";
 import { connectFreighter, type MessageSigner } from "@/lib/freighter";
 import { errMsg } from "@/lib/err";
+import { Addr } from "../addr";
 
 const CONFIGS: { kind: CtKind; title: string; blurb: string }[] = [
   {
     kind: "vanilla",
-    title: "Vanilla — no compliance",
+    title: "No compliance",
     blurb:
       "A plain confidential token. No owner, no freeze, no policy. Anyone who registers can deposit, transfer, and withdraw.",
   },
   {
     kind: "compliance",
-    title: "Compliance — freeze only",
+    title: "Compliance (freeze only)",
     blurb:
       "Adds an owner (you) who can freeze and unfreeze individual accounts. A frozen account is blocked from every operation until unfrozen. No external policy.",
   },
   {
     kind: "allowlist",
-    title: "Compliance + allowlist (KYC)",
+    title: "Compliance + Allowlist Policy",
     blurb:
       "Freeze/unfreeze plus an allowlist policy: only accounts the owner has explicitly allowed may transact. Use it as a KYC gate — onboard a user by allowing their address after verifying them.",
   },
   {
     kind: "blocklist",
-    title: "Compliance + blocklist (KYC)",
+    title: "Compliance + Blocklist Policy",
     blurb:
       "Freeze/unfreeze plus a blocklist policy: everyone may transact except accounts the owner has blocked. Use it to enforce sanctions/AML denials — block an address to cut it off.",
   },
@@ -154,7 +155,7 @@ export default function AdvancedPage() {
       const base = DEFAULT_DEPLOYMENT;
       const adv: Deployment = {
         id: "advanced",
-        label: `${kind} · ${short(token)}`,
+        label: `${short(token)}`,
         kind,
         rpcUrl: base.rpcUrl,
         networkPassphrase: base.networkPassphrase,
@@ -213,14 +214,14 @@ export default function AdvancedPage() {
       {advanced && (
         <div className="mb-6 flex flex-wrap items-center gap-3 rounded border border-neutral-800 bg-neutral-900/40 p-3 text-sm">
           <span className="text-neutral-400">
-            Current advanced deployment: <span className="font-medium text-neutral-200">{advanced.label}</span>{" "}
+            Current deployment: <span className="font-medium text-neutral-200">{advanced.label}</span>{" "}
             ({kindLabel(advanced.kind)})
           </span>
           <button
             onClick={clearAdvanced}
-            className="rounded border border-neutral-700 px-2.5 py-1 text-xs font-medium hover:bg-neutral-800"
+            className="rounded bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-500"
           >
-            Forget & use default
+            Forget
           </button>
         </div>
       )}
@@ -317,7 +318,7 @@ export default function AdvancedPage() {
           <p className="mb-3 text-sm text-neutral-400">
             {account ? (
               <>
-                Connected as <span className="font-mono text-neutral-300">{short(account)}</span>
+                Connected as <Addr value={account} className="text-neutral-300" />
                 {kind !== "vanilla" && " — this account becomes the token owner / admin."}
               </>
             ) : (
@@ -339,7 +340,7 @@ export default function AdvancedPage() {
               disabled={busy !== null || !factoryReady || underlying.trim().length === 0}
               className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500 disabled:opacity-50"
             >
-              {busy === "deploying" ? "Deploying…" : `Deploy ${kindLabel(kind)}`}
+              {busy === "deploying" ? "Deploying…" : `Deploy`}
             </button>
           </div>
         </section>
@@ -354,11 +355,6 @@ export default function AdvancedPage() {
           </section>
         )}
       </div>
-
-      <footer className="mt-10 font-mono text-xs text-neutral-600">
-        factory {short(DEFAULT_DEPLOYMENT.contracts.factory || "—")} · verifier{" "}
-        {short(DEFAULT_DEPLOYMENT.contracts.verifier)} · auditor {short(DEFAULT_DEPLOYMENT.contracts.auditor)}
-      </footer>
     </main>
   );
 }

@@ -5,6 +5,8 @@ import { ConfidentialWallet, type WalletView, type TxPhase } from "@/lib/wallet"
 import { useActiveDeployment } from "@/lib/active-deployment";
 import { errMsg } from "@/lib/err";
 import { EventsPanel } from "./events-panel";
+import { ServingBadge } from "../serving-badge";
+import { Addr } from "../addr";
 
 type ActionTab = "deposit" | "withdraw" | "transfer" | "merge";
 
@@ -144,13 +146,14 @@ export default function Page() {
     <main className="mx-auto max-w-3xl px-5 py-10">
       <header className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">
-          Account holder <span className="text-base font-normal text-neutral-500">· wallet</span>
+          Account holder
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-neutral-400">
           Hold tokens and move them without revealing amounts on-chain: deposit, merge, transfer,
           and withdraw, each as a client-side zero-knowledge proof. To prove what a single transfer
           paid, disclose it from the activity list below.
         </p>
+        <ServingBadge className="mt-4" />
       </header>
 
       {error && (
@@ -326,11 +329,6 @@ export default function Page() {
       )}
 
       <LogPanel logs={logs} />
-
-      <footer className="mt-10 font-mono text-xs text-neutral-600">
-        {active.label} · token {short(active.contracts.token)} · verifier {short(active.contracts.verifier)} ·
-        auditor {short(active.contracts.auditor)} · events {active.indexerUrl ? "RPC + indexer" : "RPC only"}
-      </footer>
     </main>
   );
 }
@@ -394,7 +392,7 @@ function Balances({ view }: { view: WalletView | null }) {
   return (
     <section className="rounded border border-neutral-800 p-4">
       <div className="mb-3 flex items-center justify-between">
-        <span className="font-mono text-sm text-neutral-400">{view.address}</span>
+        <Addr value={view.address} full className="text-sm text-neutral-400" />
         {view.matchesChain !== null && (
           <span
             className={`rounded px-2 py-0.5 text-xs ${
@@ -435,6 +433,3 @@ function LogPanel({ logs }: { logs: string[] }) {
   );
 }
 
-function short(id: string): string {
-  return `${id.slice(0, 4)}…${id.slice(-4)}`;
-}
