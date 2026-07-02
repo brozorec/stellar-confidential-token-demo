@@ -42,28 +42,6 @@ import { PageShell } from "../page-shell";
 import { ErrorBox } from "../error-box";
 import { Addr } from "../addr";
 
-/** Six-tooth cog — marks the redeploy action. */
-function Gear() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden>
-      {[0, 60, 120, 180, 240, 300].map((deg) => (
-        <rect
-          key={deg}
-          x="7.15"
-          y="1.3"
-          width="1.7"
-          height="2.4"
-          rx="0.4"
-          fill="currentColor"
-          transform={`rotate(${deg} 8 8)`}
-        />
-      ))}
-      <circle cx="8" cy="8" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
-      <circle cx="8" cy="8" r="1.1" fill="none" stroke="currentColor" strokeWidth="1.1" />
-    </svg>
-  );
-}
-
 /** Small triangular alert glyph — marks the danger-zone header. */
 function Warning() {
   return (
@@ -116,10 +94,10 @@ function RedeploySection() {
     <section className="mt-8 rounded border border-red-900/60 bg-red-950/10 p-4">
       <h2 className="mb-1 flex items-center gap-1.5 font-medium text-red-300">
         <Warning />
-        Danger zone — redeploy
+        Danger zone
       </h2>
       <p className="mb-3 text-xs leading-relaxed text-neutral-400">
-        Reconfigure and deploy a brand-new confidential token through the factory. This does not
+        Deploy a brand-new confidential token through the factory. This does not
         modify the current token — it replaces it as your active advanced deployment, so you start
         from scratch: no registered accounts, balances, or compliance history carry over, and the
         account you deploy with becomes the new owner.
@@ -128,8 +106,7 @@ function RedeploySection() {
         href="/advanced"
         className="inline-flex items-center gap-1.5 rounded border border-red-800 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:border-red-700 hover:bg-red-950/40"
       >
-        <Gear />
-        Reconfigure &amp; redeploy →
+        Redeploy →
       </Link>
     </section>
   );
