@@ -42,17 +42,40 @@ import { PageShell } from "../page-shell";
 import { ErrorBox } from "../error-box";
 import { Addr } from "../addr";
 
-/** Settings cog — marks the redeploy action. */
+/** Six-tooth cog — marks the redeploy action. */
 function Gear() {
   return (
+    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden>
+      {[0, 60, 120, 180, 240, 300].map((deg) => (
+        <rect
+          key={deg}
+          x="7.15"
+          y="1.3"
+          width="1.7"
+          height="2.4"
+          rx="0.4"
+          fill="currentColor"
+          transform={`rotate(${deg} 8 8)`}
+        />
+      ))}
+      <circle cx="8" cy="8" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="8" cy="8" r="1.1" fill="none" stroke="currentColor" strokeWidth="1.1" />
+    </svg>
+  );
+}
+
+/** Small triangular alert glyph — marks the danger-zone header. */
+function Warning() {
+  return (
     <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" aria-hidden>
-      <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.3" />
       <path
-        d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"
+        d="M8 2 14.5 13.5h-13z"
         stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
       />
+      <path d="M8 6.3v3.2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <circle cx="8" cy="11.3" r="0.75" fill="currentColor" />
     </svg>
   );
 }
@@ -82,14 +105,19 @@ function replaySet(
   return [...s];
 }
 
-/** Redeploy — start over with a brand-new token. Kept apart from the
-    compliance panels because it replaces the whole deployment, not a setting
-    within it. Shown for any deployment created in advanced mode (compliant or
-    vanilla), since this dashboard is the only place to reach it. */
+/** Redeploy — start over with a brand-new token. Styled as a danger zone
+    (irreversible: the current token, its registrations, and compliance
+    history are abandoned) and kept apart from the compliance panels because
+    it replaces the whole deployment, not a setting within it. Shown for any
+    deployment created in advanced mode (compliant or vanilla), since this
+    dashboard is the only place to reach it. */
 function RedeploySection() {
   return (
-    <section className="mt-8 rounded border border-neutral-800 bg-neutral-900/30 p-4">
-      <h2 className="mb-1 font-medium">Redeploy a new token</h2>
+    <section className="mt-8 rounded border border-red-900/60 bg-red-950/10 p-4">
+      <h2 className="mb-1 flex items-center gap-1.5 font-medium text-red-300">
+        <Warning />
+        Danger zone — redeploy
+      </h2>
       <p className="mb-3 text-xs leading-relaxed text-neutral-400">
         Reconfigure and deploy a brand-new confidential token through the factory. This does not
         modify the current token — it replaces it as your active advanced deployment, so you start
@@ -98,7 +126,7 @@ function RedeploySection() {
       </p>
       <Link
         href="/advanced"
-        className="inline-flex items-center gap-1.5 rounded border border-neutral-700 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:border-neutral-600 hover:bg-neutral-800"
+        className="inline-flex items-center gap-1.5 rounded border border-red-800 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:border-red-700 hover:bg-red-950/40"
       >
         <Gear />
         Reconfigure &amp; redeploy →
