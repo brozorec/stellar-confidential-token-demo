@@ -88,8 +88,10 @@ function replaySet(
     history are abandoned) and kept apart from the compliance panels because
     it replaces the whole deployment, not a setting within it. Shown for any
     deployment created in advanced mode (compliant or vanilla), since this
-    dashboard is the only place to reach it. */
+    dashboard is the only place to reach it. Forgets the current deployment
+    on click — the /advanced wizard has nothing left to carry over. */
 function RedeploySection() {
+  const { clearAdvanced } = useActiveDeployment();
   return (
     <section className="mt-8 rounded border border-red-900/60 bg-red-950/10 p-4">
       <h2 className="mb-1 flex items-center gap-1.5 font-medium text-red-300">
@@ -104,6 +106,7 @@ function RedeploySection() {
       </p>
       <Link
         href="/advanced"
+        onClick={clearAdvanced}
         className="inline-flex items-center gap-1.5 rounded border border-red-800 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:border-red-700 hover:bg-red-950/40"
       >
         Redeploy →

@@ -63,7 +63,7 @@ const CONFIGS: { kind: CtKind; title: string; blurb: string }[] = [
 
 export default function AdvancedPage() {
   const router = useRouter();
-  const { advanced, saveAdvanced, clearAdvanced } = useActiveDeployment();
+  const { saveAdvanced } = useActiveDeployment();
 
   const [account, setAccount] = useState<string | null>(null);
   const [underlying, setUnderlying] = useState(XLM_SAC);
@@ -194,21 +194,6 @@ export default function AdvancedPage() {
           <code className="font-mono">scripts/deploy.ts</code> and paste the printed{" "}
           <code className="font-mono">factory</code> id into{" "}
           <code className="font-mono">packages/app/lib/deployment.ts</code>.
-        </div>
-      )}
-
-      {advanced && (
-        <div className="mb-6 flex flex-wrap items-center gap-3 rounded border border-neutral-800 bg-neutral-900/40 p-3 text-sm">
-          <span className="text-neutral-400">
-            Current deployment: <span className="font-medium text-neutral-200">{advanced.label}</span>{" "}
-            ({kindLabel(advanced.kind)})
-          </span>
-          <button
-            onClick={clearAdvanced}
-            className="rounded bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-500"
-          >
-            Forget
-          </button>
         </div>
       )}
 
