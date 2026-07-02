@@ -12,7 +12,7 @@
 		{
 			// Self-reference service binding for caching (name must match worker name above)
 			"binding": "WORKER_SELF_REFERENCE",
-			"service": "ctd-app"
+			"service": "stellar-confidential-token-demo"
 		}
 	]
 }
