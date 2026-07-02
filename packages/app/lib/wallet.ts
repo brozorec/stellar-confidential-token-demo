@@ -10,7 +10,7 @@
  */
 
 import {
-  ChainClient,
+  type ChainClient,
   type Signer,
   type OnChainAccount,
   deriveKeys,
@@ -31,7 +31,7 @@ import {
   submitMerge,
   submitWithdraw,
   submitTransfer,
-  IndexerClient,
+  type IndexerClient,
   hybridFetchEvents,
   proveRecipientDisclosure,
   proveSenderDisclosure,
@@ -57,6 +57,8 @@ import type { Deployment } from "./deployment";
 import { connectFreighter } from "./freighter";
 import { keyDerivationMessage, skFromSignature } from "./derive-key";
 import { ensureBrowserBackend } from "./bb-loader";
+import { clientsFor } from "./rpc";
+import { truncatePrefix } from "./format";
 
 type Log = (msg: string) => void;
 type CircuitName = "register" | "withdraw" | "transfer" | "disclose_recipient" | "disclose_sender";
@@ -101,13 +103,9 @@ export class ConfidentialWallet {
     ensureBrowserBackend();
     const signer = await connectFreighter();
     log(`connected ${signer.publicKey}`);
-    log(`deployment: ${deployment.label} (token ${deployment.contracts.token.slice(0, 6)}…)`);
+    log(`deployment: ${deployment.label} (token ${truncatePrefix(deployment.contracts.token, 6)})`);
 
-    const client = new ChainClient({
-      rpcUrl: deployment.rpcUrl,
-      networkPassphrase: deployment.networkPassphrase,
-      contracts: deployment.contracts,
-    });
+    const { client, indexer } = clientsFor(deployment);
 
     // Keys are token-bound (addr_f domain separation), so a different deployment
     // derives a different key set and caches under a different localStorage key.
@@ -132,9 +130,6 @@ export class ConfidentialWallet {
     // Optional Goldsky indexer: when configured, the hybrid event source
     // backfills history older than the RPC's ~7-day window. Without it the app
     // is RPC-only (today's behavior).
-    const indexer = deployment.indexerUrl
-      ? new IndexerClient({ baseUrl: deployment.indexerUrl })
-      : undefined;
     if (indexer) log(`indexer configured (${deployment.indexerUrl})`);
 
     // State store is namespaced by token address so separate deployments using
@@ -195,19 +190,19 @@ export class ConfidentialWallet {
     onPhase?.("submitting");
     this.log("submitting register…");
     const r = await submitRegister(this.client, this.signer, this.address, this.deployment.auditorId, w, proof);
-    this.log(`registered (tx ${r.hash.slice(0, 10)}…)`);
+    this.log(`registered (tx ${truncatePrefix(r.hash)})`);
   }
 
   async deposit(amount: bigint): Promise<void> {
     this.log(`depositing ${amount}…`);
     const r = await submitDeposit(this.client, this.signer, this.address, this.address, amount);
-    this.log(`deposited (tx ${r.hash.slice(0, 10)}…) → receiving balance`);
+    this.log(`deposited (tx ${truncatePrefix(r.hash)}) → receiving balance`);
   }
 
   async merge(): Promise<void> {
     this.log("merging receiving → spendable…");
     const r = await submitMerge(this.client, this.signer, this.address);
-    this.log(`merged (tx ${r.hash.slice(0, 10)}…)`);
+    this.log(`merged (tx ${truncatePrefix(r.hash)})`);
   }
 
   async transfer(to: string, amount: bigint, onPhase?: (p: TxPhase) => void): Promise<void> {
@@ -237,7 +232,7 @@ export class ConfidentialWallet {
     await this.engine.setSpendable(w.next);
     // No r_e bookkeeping (§15.2): the witness derives it from (vk, sigma), so
     // discloseSent() re-derives it from the emitted event whenever needed.
-    this.log(`transferred ${amount} → ${to.slice(0, 6)}… (tx ${r.hash.slice(0, 10)}…)`);
+    this.log(`transferred ${amount} → ${truncatePrefix(to, 6)} (tx ${truncatePrefix(r.hash)})`);
   }
 
   async withdraw(amount: bigint, onPhase?: (p: TxPhase) => void): Promise<void> {
@@ -253,7 +248,7 @@ export class ConfidentialWallet {
     this.log("submitting withdraw…");
     const r = await submitWithdraw(this.client, this.signer, this.address, this.address, amount, w, proof);
     await this.engine.setSpendable(w.next);
-    this.log(`withdrew ${amount} → public (tx ${r.hash.slice(0, 10)}…)`);
+    this.log(`withdrew ${amount} → public (tx ${truncatePrefix(r.hash)})`);
   }
 
   /**
@@ -388,7 +383,7 @@ export class ConfidentialWallet {
       request,
       prover: this.prover("disclose_recipient"),
     });
-    this.log(`disclosure proof ready for event in tx ${event.txHash.slice(0, 10)}…`);
+    this.log(`disclosure proof ready for event in tx ${truncatePrefix(event.txHash)}`);
     return bundle;
   }
 
@@ -418,8 +413,14 @@ export class ConfidentialWallet {
       request,
       prover: this.prover("disclose_sender"),
     });
-    this.log(`disclosure proof ready for event in tx ${event.txHash.slice(0, 10)}…`);
+    this.log(`disclosure proof ready for event in tx ${truncatePrefix(event.txHash)}`);
     return bundle;
+  }
+
+  /** Free every cached bb.js prover (worker + WASM) before discarding this wallet. */
+  async destroy(): Promise<void> {
+    await Promise.all([...this.provers.values()].map((p) => p.destroy()));
+    this.provers.clear();
   }
 
   /** Sync from RPC events, verify against chain, and return a UI view. */

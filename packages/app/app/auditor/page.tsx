@@ -18,8 +18,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ChainClient,
-  IndexerClient,
   hybridFetchEvents,
   auditTransfer,
   auditWithdraw,
@@ -30,9 +28,11 @@ import {
   type ConfidentialEvent,
 } from "@ctd/sdk";
 import { useActiveDeployment } from "@/lib/active-deployment";
+import { clientsFor } from "@/lib/rpc";
 import { errMsg } from "@/lib/err";
 import { CopyButton } from "../copy-button";
-import { ServingBadge } from "../serving-badge";
+import { PageShell } from "../page-shell";
+import { ErrorBox } from "../error-box";
 import { Addr } from "../addr";
 import { TxLink } from "../tx-link";
 
@@ -169,17 +169,10 @@ export default function AuditorPage() {
     setBusy(true);
     setError(null);
     try {
-      const client = new ChainClient({
-        rpcUrl: active.rpcUrl,
-        networkPassphrase: active.networkPassphrase,
-        contracts: active.contracts,
-      });
       // Hybrid source: the indexer (when configured) backfills the full history
       // below the RPC's ~7-day window — exactly what an auditor needs. The RPC
       // leg is clamped to the retention boundary internally.
-      const indexer = active.indexerUrl
-        ? new IndexerClient({ baseUrl: active.indexerUrl })
-        : undefined;
+      const { client, indexer } = clientsFor(active);
       const { events } = await hybridFetchEvents(client, indexer, {
         fromLedger: active.deployedAtLedger,
       });
@@ -198,18 +191,10 @@ export default function AuditorPage() {
   }, [load]);
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">Auditor</h1>
-        <p className="mt-2 text-sm leading-relaxed text-neutral-400">
-          You are the designated auditor for this deployment: every account registers under your
-          auditor id. Amounts that everyone else sees as ciphertext, you read in cleartext: each
-          transfer and withdrawal carries ECDH ciphertexts addressed to your key. No wallet, no
-          proofs, and no account cooperation required.
-        </p>
-        <ServingBadge className="mt-4" />
-      </header>
-
+    <PageShell
+      title="Auditor"
+      subtitle="You are the designated auditor for this deployment: every account registers under your auditor id. Amounts that everyone else sees as ciphertext, you read in cleartext: each transfer and withdrawal carries ECDH ciphertexts addressed to your key. No wallet, no proofs, and no account cooperation required."
+    >
       <div className="space-y-6">
         <section className="rounded border border-amber-900/70 bg-amber-950/20 p-4">
           <h3 className="mb-1 font-medium text-amber-300">Your auditor key (id {active.auditorId})</h3>
@@ -290,7 +275,9 @@ export default function AuditorPage() {
             cleartext — decrypted with your key alone.
           </p>
           {error && (
-            <div className="mb-3 rounded border border-red-800 bg-red-950/40 p-2 text-xs text-red-300">{error}</div>
+            <ErrorBox size="sm" className="mb-3">
+              {error}
+            </ErrorBox>
           )}
           {!rows && busy && <p className="text-sm text-neutral-500">Syncing events…</p>}
           {rows && rows.length === 0 && (
@@ -305,7 +292,7 @@ export default function AuditorPage() {
           )}
         </section>
       </div>
-    </main>
+    </PageShell>
   );
 }
 

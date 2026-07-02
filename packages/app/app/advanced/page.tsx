@@ -11,7 +11,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ChainClient,
   deployVanillaToken,
   deployCompliantToken,
   deployPolicyAndToken,
@@ -26,7 +25,13 @@ import {
 } from "@/lib/deployment";
 import { useActiveDeployment } from "@/lib/active-deployment";
 import { connectFreighter, type MessageSigner } from "@/lib/freighter";
+import { clientsFor } from "@/lib/rpc";
 import { errMsg } from "@/lib/err";
+import { truncateMiddle } from "@/lib/format";
+import { useLog } from "@/lib/use-log";
+import { PageShell } from "../page-shell";
+import { ErrorBox } from "../error-box";
+import { LogPanel } from "../log-panel";
 import { Addr } from "../addr";
 
 const CONFIGS: { kind: CtKind; title: string; blurb: string }[] = [
@@ -56,8 +61,6 @@ const CONFIGS: { kind: CtKind; title: string; blurb: string }[] = [
   },
 ];
 
-const short = (id: string) => `${id.slice(0, 4)}…${id.slice(-4)}`;
-
 export default function AdvancedPage() {
   const router = useRouter();
   const { advanced, saveAdvanced, clearAdvanced } = useActiveDeployment();
@@ -67,25 +70,13 @@ export default function AdvancedPage() {
   const [kind, setKind] = useState<CtKind>("compliance");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
+  const [logs, log] = useLog(40);
   const [check, setCheck] = useState<string | null>(null);
 
   const factoryReady = DEFAULT_DEPLOYMENT.contracts.factory.length > 0;
   const customUnderlying = underlying.trim() !== XLM_SAC;
 
-  const log = useCallback((m: string) => {
-    setLogs((p) => [`${new Date().toLocaleTimeString()}  ${m}`, ...p].slice(0, 40));
-  }, []);
-
-  const client = useMemo(
-    () =>
-      new ChainClient({
-        rpcUrl: DEFAULT_DEPLOYMENT.rpcUrl,
-        networkPassphrase: DEFAULT_DEPLOYMENT.networkPassphrase,
-        contracts: DEFAULT_DEPLOYMENT.contracts,
-      }),
-    [],
-  );
+  const { client } = useMemo(() => clientsFor(DEFAULT_DEPLOYMENT), []);
 
   const connect = useCallback(async () => {
     setError(null);
@@ -133,7 +124,7 @@ export default function AdvancedPage() {
 
       let token: string;
       let policy: string | undefined;
-      log(`deploying ${kindLabel(kind)} via factory ${short(wiring.factory)}…`);
+      log(`deploying ${kindLabel(kind)} via factory ${truncateMiddle(wiring.factory, 4, 4)}…`);
       if (kind === "vanilla") {
         token = await deployVanillaToken(client, signer, wiring);
       } else if (kind === "compliance") {
@@ -155,7 +146,7 @@ export default function AdvancedPage() {
       const base = DEFAULT_DEPLOYMENT;
       const adv: Deployment = {
         id: "advanced",
-        label: `${short(token)}`,
+        label: `${truncateMiddle(token, 4, 4)}`,
         kind,
         rpcUrl: base.rpcUrl,
         networkPassphrase: base.networkPassphrase,
@@ -186,21 +177,16 @@ export default function AdvancedPage() {
   }, [client, underlying, kind, log, saveAdvanced, router]);
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">
+    <PageShell
+      title={
+        <>
           Advanced mode <span className="text-base font-normal text-neutral-500">· deploy your own token</span>
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-neutral-400">
-          Configure a confidential token and deploy it through the shared factory. The factory holds
-          the contract code; your Freighter account signs the deploy and becomes the token&apos;s owner
-          for compliant configurations. The verifier and auditor are reused unchanged.
-        </p>
-      </header>
-
-      {error && (
-        <div className="mb-6 rounded border border-red-800 bg-red-950/40 p-3 text-sm text-red-300">{error}</div>
-      )}
+        </>
+      }
+      subtitle="Configure a confidential token and deploy it through the shared factory. The factory holds the contract code; your Freighter account signs the deploy and becomes the token's owner for compliant configurations. The verifier and auditor are reused unchanged."
+      badge={false}
+    >
+      {error && <ErrorBox className="mb-6">{error}</ErrorBox>}
 
       {!factoryReady && (
         <div className="mb-6 rounded border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
@@ -345,16 +331,8 @@ export default function AdvancedPage() {
           </div>
         </section>
 
-        {logs.length > 0 && (
-          <section className="rounded border border-neutral-900 bg-neutral-950/60 p-3">
-            <ul className="space-y-1 font-mono text-xs text-neutral-500">
-              {logs.map((l, i) => (
-                <li key={i}>{l}</li>
-              ))}
-            </ul>
-          </section>
-        )}
+        <LogPanel logs={logs} />
       </div>
-    </main>
+    </PageShell>
   );
 }

@@ -10,10 +10,7 @@
 
 import { useState, type MouseEvent } from "react";
 import { HoverTip } from "./hover-tip";
-
-function short(value: string): string {
-  return value ? `${value.slice(0, 6)}…${value.slice(-4)}` : "—";
-}
+import { truncateMiddle } from "@/lib/format";
 
 export function Addr({
   value,
@@ -49,7 +46,7 @@ export function Addr({
           copied ? "text-emerald-400" : ""
         } ${className}`}
       >
-        {copied ? "Copied ✓" : full ? value : short(value)}
+        {copied ? "Copied ✓" : full ? value : truncateMiddle(value)}
       </button>
       {!copied && <HoverTip label="Copy" />}
     </span>

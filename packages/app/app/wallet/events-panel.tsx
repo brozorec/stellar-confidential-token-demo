@@ -17,6 +17,7 @@ import type { ConfidentialWallet } from "@/lib/wallet";
 import { useActiveDeployment } from "@/lib/active-deployment";
 import { errMsg } from "@/lib/err";
 import { CopyButton } from "../copy-button";
+import { ErrorBox } from "../error-box";
 import { Addr } from "../addr";
 import { TxLink } from "../tx-link";
 
@@ -60,7 +61,11 @@ export function EventsPanel({ wallet, reloadKey = 0 }: { wallet: ConfidentialWal
         Events involving your account ({active.indexerUrl ? "full history via indexer" : "~7-day RPC retention"}).
         Disclose a transfer to prove its amount to a third party — as its receiver or as its sender.
       </p>
-      {error && <div className="mb-3 rounded border border-red-800 bg-red-950/40 p-2 text-xs text-red-300">{error}</div>}
+      {error && (
+        <ErrorBox size="sm" className="mb-3">
+          {error}
+        </ErrorBox>
+      )}
       {events && events.length === 0 && (
         <p className="text-sm text-neutral-500">No activity in the retention window.</p>
       )}
@@ -195,7 +200,7 @@ function DiscloseFlow({
       >
         {busy ? "Proving…" : "Generate disclosure proof"}
       </button>
-      {error && <div className="rounded border border-red-800 bg-red-950/40 p-2 text-xs text-red-300">{error}</div>}
+      {error && <ErrorBox size="sm">{error}</ErrorBox>}
       {bundleJson && (
         <div className="space-y-2">
           <textarea

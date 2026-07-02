@@ -16,11 +16,9 @@
  *      from @ctd/disclosure, and decrypts the disclosed amount.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ChainClient,
-  IndexerClient,
-  CircuitProver,
+  type CircuitProver,
   proverFromArtifact,
   generateRecipientKeys,
   recipientKeysFromSecret,
@@ -41,9 +39,10 @@ import discloseSenderVk from "@ctd/disclosure/artifacts/disclose_sender.vk.json"
 
 import { useActiveDeployment } from "@/lib/active-deployment";
 import { ensureBrowserBackend } from "@/lib/bb-loader";
+import { clientsFor } from "@/lib/rpc";
 import { errMsg } from "@/lib/err";
 import { CopyButton } from "../copy-button";
-import { ServingBadge } from "../serving-badge";
+import { PageShell } from "../page-shell";
 import { Addr } from "../addr";
 import { TxLink } from "../tx-link";
 
@@ -71,6 +70,26 @@ export default function VerifyPage() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<VerifiedDisclosure | null>(null);
   const [error, setError] = useState<{ stage: string; message: string } | null>(null);
+
+  // Provers are the expensive part of verifying (bb.js worker + WASM init), so
+  // they're cached per circuit across repeat verifications and only freed when
+  // this page unmounts.
+  const proversRef = useRef<Map<keyof typeof ARTIFACTS, CircuitProver>>(new Map());
+  useEffect(() => {
+    const provers = proversRef.current;
+    return () => {
+      for (const p of provers.values()) void p.destroy();
+      provers.clear();
+    };
+  }, []);
+  const proverFor = useCallback((circuitId: keyof typeof ARTIFACTS): CircuitProver => {
+    let p = proversRef.current.get(circuitId);
+    if (!p) {
+      p = proverFromArtifact(ARTIFACTS[circuitId].circuit as never);
+      proversRef.current.set(circuitId, p);
+    }
+    return p;
+  }, []);
 
   // Long-lived receiver identity + last issued request, both local-only.
   useEffect(() => {
@@ -103,57 +122,34 @@ export default function VerifyPage() {
     try {
       ensureBrowserBackend();
       const bundle = parseBundle(bundleJson);
-      const client = new ChainClient({
-        rpcUrl: active.rpcUrl,
-        networkPassphrase: active.networkPassphrase,
-        contracts: active.contracts,
-      });
       // With an indexer, ref_E resolves even for transfers older than the RPC's
       // ~7-day window (verifyDisclosure tries the indexer first, then the RPC).
-      const indexer = active.indexerUrl
-        ? new IndexerClient({ baseUrl: active.indexerUrl })
-        : undefined;
+      const { client, indexer } = clientsFor(active);
       const artifacts = ARTIFACTS[bundle.circuitId];
-      const prover: CircuitProver = proverFromArtifact(artifacts.circuit as never);
-      try {
-        setResult(
-          await verifyDisclosure({
-            client,
-            indexer,
-            bundle,
-            request,
-            keys,
-            prover,
-            pinnedVk: vkBytes(artifacts.vk.vkBase64),
-          }),
-        );
-      } finally {
-        await prover.destroy();
-      }
+      setResult(
+        await verifyDisclosure({
+          client,
+          indexer,
+          bundle,
+          request,
+          keys,
+          prover: proverFor(bundle.circuitId),
+          pinnedVk: vkBytes(artifacts.vk.vkBase64),
+        }),
+      );
     } catch (e) {
       if (e instanceof DisclosureVerifyError) setError({ stage: e.stage, message: e.message });
       else setError({ stage: "input", message: errMsg(e) });
     } finally {
       setBusy(false);
     }
-  }, [keys, request, bundleJson, active]);
+  }, [keys, request, bundleJson, active, proverFor]);
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Disclosure receiver
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-neutral-400">
-          For a verifying counterparty (a compliance desk, tax authority, or KYC provider) that
-          needs proof of a single fact about one on-chain transfer. You hold no key into the system
-          and learn nothing beyond what is explicitly proved to you. No wallet required: this page
-          reads the chain, verifies the proof against the shared circuit artifacts, and decrypts the
-          amount sealed to your key. Nothing here is published.
-        </p>
-        <ServingBadge className="mt-4" />
-      </header>
-
+    <PageShell
+      title="Disclosure receiver"
+      subtitle="For a verifying counterparty (a compliance desk, tax authority, or KYC provider) that needs proof of a single fact about one on-chain transfer. You hold no key into the system and learn nothing beyond what is explicitly proved to you. No wallet required: this page reads the chain, verifies the proof against the shared circuit artifacts, and decrypts the amount sealed to your key. Nothing here is published."
+    >
       <div className="space-y-6">
         <section className="rounded border border-neutral-800 p-4">
           <h3 className="mb-1 font-medium"><span className="text-cyan-400">1</span> · Your disclosure request</h3>
@@ -259,7 +255,7 @@ export default function VerifyPage() {
           </section>
         )}
       </div>
-    </main>
+    </PageShell>
   );
 }
 

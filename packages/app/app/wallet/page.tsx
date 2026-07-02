@@ -4,8 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { ConfidentialWallet, type WalletView, type TxPhase } from "@/lib/wallet";
 import { useActiveDeployment } from "@/lib/active-deployment";
 import { errMsg } from "@/lib/err";
+import { useLog } from "@/lib/use-log";
 import { EventsPanel } from "./events-panel";
-import { ServingBadge } from "../serving-badge";
+import { PageShell } from "../page-shell";
+import { ErrorBox } from "../error-box";
+import { LogPanel } from "../log-panel";
 import { Addr } from "../addr";
 
 type ActionTab = "deposit" | "withdraw" | "transfer" | "merge";
@@ -54,7 +57,7 @@ export default function Page() {
   const { active } = useActiveDeployment();
   const [wallet, setWallet] = useState<ConfidentialWallet | null>(null);
   const [view, setView] = useState<WalletView | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
+  const [logs, log] = useLog(60);
   const [busy, setBusy] = useState<string | null>(null);
   const [phase, setPhase] = useState<TxPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,10 +70,6 @@ export default function Page() {
   const [transferTo, setTransferTo] = useState("");
   const [transferAmt, setTransferAmt] = useState("400");
   const [withdrawAmt, setWithdrawAmt] = useState("400");
-
-  const log = useCallback((msg: string) => {
-    setLogs((prev) => [`${new Date().toLocaleTimeString()}  ${msg}`, ...prev].slice(0, 60));
-  }, []);
 
   const loadRecipients = useCallback(
     async (w: ConfidentialWallet) => {
@@ -103,9 +102,13 @@ export default function Page() {
 
   // Switching deployment invalidates the connected wallet (different token →
   // different keys, balances, and event history). Reset so the user reconnects
-  // against the newly-active deployment.
+  // against the newly-active deployment, freeing the old wallet's cached bb.js
+  // provers (workers/WASM) first.
   useEffect(() => {
-    setWallet(null);
+    setWallet((prev) => {
+      void prev?.destroy();
+      return null;
+    });
     setView(null);
     setRecipients(null);
     setMergeNotice(null);
@@ -143,22 +146,11 @@ export default function Page() {
     : ["deposit", "withdraw", "transfer"];
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Account holder
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-neutral-400">
-          Hold tokens and move them without revealing amounts on-chain: deposit, merge, transfer,
-          and withdraw, each as a client-side zero-knowledge proof. To prove what a single transfer
-          paid, disclose it from the activity list below.
-        </p>
-        <ServingBadge className="mt-4" />
-      </header>
-
-      {error && (
-        <div className="mb-6 rounded border border-red-800 bg-red-950/40 p-3 text-sm text-red-300">{error}</div>
-      )}
+    <PageShell
+      title="Account holder"
+      subtitle="Hold tokens and move them without revealing amounts on-chain: deposit, merge, transfer, and withdraw, each as a client-side zero-knowledge proof. To prove what a single transfer paid, disclose it from the activity list below."
+    >
+      {error && <ErrorBox className="mb-6">{error}</ErrorBox>}
 
       {!wallet ? (
         <button
@@ -329,7 +321,7 @@ export default function Page() {
       )}
 
       <LogPanel logs={logs} />
-    </main>
+    </PageShell>
   );
 }
 
@@ -421,15 +413,6 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="text-xs uppercase tracking-wide text-neutral-500">{label}</div>
       <div className="text-2xl">{value}</div>
     </div>
-  );
-}
-
-function LogPanel({ logs }: { logs: string[] }) {
-  if (logs.length === 0) return null;
-  return (
-    <pre className="mt-6 max-h-56 overflow-auto rounded border border-neutral-900 bg-neutral-500/10 p-3 text-xs text-neutral-400">
-      {logs.join("\n")}
-    </pre>
   );
 }
 

@@ -17,8 +17,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ChainClient,
-  IndexerClient,
   hybridFetchEvents,
   readOwner,
   freezeAccount,
@@ -32,8 +30,10 @@ import {
 } from "@ctd/sdk";
 import { useActiveDeployment } from "@/lib/active-deployment";
 import { connectFreighter, type MessageSigner } from "@/lib/freighter";
+import { clientsFor } from "@/lib/rpc";
 import { errMsg } from "@/lib/err";
-import { ServingBadge } from "../serving-badge";
+import { PageShell } from "../page-shell";
+import { ErrorBox } from "../error-box";
 import { Addr } from "../addr";
 
 /** Settings cog — marks the redeploy action. */
@@ -96,19 +96,7 @@ export default function AdminPage() {
   const account = signer?.publicKey ?? null;
   const isAdmin = !!account && !!owner && account === owner;
 
-  const client = useMemo(
-    () =>
-      new ChainClient({
-        rpcUrl: active.rpcUrl,
-        networkPassphrase: active.networkPassphrase,
-        contracts: active.contracts,
-      }),
-    [active],
-  );
-  const indexer = useMemo(
-    () => (active.indexerUrl ? new IndexerClient({ baseUrl: active.indexerUrl }) : undefined),
-    [active.indexerUrl],
-  );
+  const { client, indexer } = useMemo(() => clientsFor(active), [active]);
 
   // Owner is a public read; load it (and reset connection) whenever the active
   // token changes.
@@ -207,7 +195,10 @@ export default function AdminPage() {
 
   if (isVanilla) {
     return (
-      <Shell>
+      <PageShell
+        title="Token admin"
+        subtitle="Manage compliance for the active confidential token: registered accounts, freezes, and (for allowlist/blocklist configs) policy membership."
+      >
         <Notice>
           This deployment is a <b>vanilla</b> token — it has no owner, freeze, or policy, so there
           is no admin dashboard. Switch to (or deploy) a compliant configuration in{" "}
@@ -216,13 +207,16 @@ export default function AdminPage() {
           </a>
           .
         </Notice>
-      </Shell>
+      </PageShell>
     );
   }
 
   if (!account) {
     return (
-      <Shell>
+      <PageShell
+        title="Token admin"
+        subtitle="Manage compliance for the active confidential token: registered accounts, freezes, and (for allowlist/blocklist configs) policy membership."
+      >
         <p className="mb-4 text-sm text-neutral-400">
           The admin dashboard requires the token owner&apos;s Freighter account.
         </p>
@@ -234,37 +228,44 @@ export default function AdminPage() {
           {busy === "connecting" ? "Connecting…" : "Connect Freighter"}
         </button>
         {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
-      </Shell>
+      </PageShell>
     );
   }
 
   if (ownerLoaded && !isAdmin) {
     return (
-      <Shell>
+      <PageShell
+        title="Token admin"
+        subtitle="Manage compliance for the active confidential token: registered accounts, freezes, and (for allowlist/blocklist configs) policy membership."
+      >
         <Notice tone="warn">
           You are connected as <Addr value={account} />, but this token&apos;s admin is{" "}
           {owner ? <Addr value={owner} /> : <span className="font-mono">unknown</span>}. Connect with
           the admin account in Freighter to manage compliance.
         </Notice>
-      </Shell>
+      </PageShell>
     );
   }
 
   if (!ownerLoaded) {
     return (
-      <Shell>
+      <PageShell
+        title="Token admin"
+        subtitle="Manage compliance for the active confidential token: registered accounts, freezes, and (for allowlist/blocklist configs) policy membership."
+      >
         <p className="text-sm text-neutral-500">Reading token owner…</p>
-      </Shell>
+      </PageShell>
     );
   }
 
   // ---- admin dashboard ----------------------------------------------------
 
   return (
-    <Shell>
-      {error && (
-        <div className="mb-4 rounded border border-red-800 bg-red-950/40 p-3 text-sm text-red-300">{error}</div>
-      )}
+    <PageShell
+      title="Token admin"
+      subtitle="Manage compliance for the active confidential token: registered accounts, freezes, and (for allowlist/blocklist configs) policy membership."
+    >
+      {error && <ErrorBox className="mb-4">{error}</ErrorBox>}
       <div className="mb-4 flex items-center justify-between">
         <p className="flex items-center gap-1 text-sm text-neutral-400">
           Admin <span className="text-neutral-300"><Addr value={account} /></span>
@@ -405,25 +406,7 @@ export default function AdminPage() {
           </Link>
         </section>
       )}
-    </Shell>
-  );
-}
-
-function Shell({ children }: { children: React.ReactNode }) {
-  return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Token admin
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-neutral-400">
-          Manage compliance for the active confidential token: registered accounts, freezes, and
-          (for allowlist/blocklist configs) policy membership.
-        </p>
-        <ServingBadge className="mt-4" />
-      </header>
-      {children}
-    </main>
+    </PageShell>
   );
 }
 

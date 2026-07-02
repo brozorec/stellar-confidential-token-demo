@@ -5,15 +5,7 @@
  */
 
 import { HoverTip } from "./hover-tip";
-
-function short(hash: string): string {
-  return hash ? `${hash.slice(0, 10)}…` : "—";
-}
-
-/** 6/4 truncation matching Addr's, for the compact button variant. */
-function short6x4(hash: string): string {
-  return hash ? `${hash.slice(0, 6)}…${hash.slice(-4)}` : "—";
-}
+import { truncateMiddle, truncatePrefix } from "@/lib/format";
 
 export function TxLink({
   hash,
@@ -43,7 +35,7 @@ export function TxLink({
           rel="noopener noreferrer"
           className={`inline-flex items-center gap-1 font-mono text-xs text-neutral-400 hover:text-neutral-200 ${className}`}
         >
-          {short6x4(hash)}
+          {truncateMiddle(hash)}
           <span aria-hidden>↗</span>
         </a>
         <HoverTip label="Open on stellar.expert" />
@@ -59,7 +51,7 @@ export function TxLink({
         rel="noopener noreferrer"
         className={`font-mono underline decoration-dotted underline-offset-2 hover:text-neutral-200 ${className}`}
       >
-        {full ? hash : short(hash)}
+        {full ? hash : truncatePrefix(hash)}
       </a>
       <HoverTip label="Open on stellar.expert" />
     </span>
