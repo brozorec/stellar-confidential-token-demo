@@ -32,6 +32,9 @@ import {
 import { useActiveDeployment } from "@/lib/active-deployment";
 import { errMsg } from "@/lib/err";
 import { CopyButton } from "../copy-button";
+import { ServingBadge } from "../serving-badge";
+import { Addr } from "../addr";
+import { TxLink } from "../tx-link";
 
 /** One decrypted line of the auditor's ledger. */
 interface AuditRow {
@@ -201,9 +204,10 @@ export default function AuditorPage() {
         <p className="mt-2 text-sm leading-relaxed text-neutral-400">
           You are the designated auditor for this deployment: every account registers under your
           auditor id. Amounts that everyone else sees as ciphertext, you read in cleartext: each
-          transfer and withdrawal carries ECDH ciphertexts addressed to your key. No wallet, no 
+          transfer and withdrawal carries ECDH ciphertexts addressed to your key. No wallet, no
           proofs, and no account cooperation required.
         </p>
+        <ServingBadge className="mt-4" />
       </header>
 
       <div className="space-y-6">
@@ -265,7 +269,9 @@ export default function AuditorPage() {
               <tbody className="text-neutral-300">
                 {accounts.map((a) => (
                   <tr key={a.address} className="border-t border-neutral-900">
-                    <td className="py-1.5 font-mono">{shortAddr(a.address)}</td>
+                    <td className="py-1.5">
+                      <Addr value={a.address} />
+                    </td>
                     <td className="py-1.5">{a.spendable === null ? "?" : a.spendable.toString()}</td>
                     <td className="py-1.5">{a.receiving.toString()}</td>
                     <td className="py-1.5 text-neutral-500">ledger {a.lastLedger}</td>
@@ -299,11 +305,6 @@ export default function AuditorPage() {
           )}
         </section>
       </div>
-
-      <footer className="mt-10 font-mono text-xs text-neutral-600">
-        {active.label} · auditor contract {shortAddr(active.contracts.auditor)} · token{" "}
-        {shortAddr(active.contracts.token)} · decryption per DESIGN.md §8
-      </footer>
     </main>
   );
 }
@@ -313,12 +314,18 @@ function AuditRowView({ row }: { row: AuditRow }) {
   // deposit/withdraw/transfer carry from→to; register/merge (and any compliance
   // event, though the auditor never emits rows for those) carry a single account.
   const parties =
-    "from" in ev ? `${shortAddr(ev.from)} → ${shortAddr(ev.to)}` : shortAddr(ev.account);
+    "from" in ev ? (
+      <>
+        <Addr value={ev.from} /> → <Addr value={ev.to} />
+      </>
+    ) : (
+      <Addr value={ev.account} />
+    );
   return (
     <li className="rounded border border-neutral-900 bg-neutral-500/10 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className={`rounded px-2 py-0.5 text-xs font-medium ${badgeCls(ev.type)}`}>{ev.type}</span>
-        <span className="font-mono text-xs text-neutral-400">{parties}</span>
+        <span className="text-xs text-neutral-400">{parties}</span>
         <span className="flex-1" />
         {row.amount !== null && (
           <span className="text-sm font-medium text-amber-300">{row.amount.toString()}</span>
@@ -334,7 +341,7 @@ function AuditRowView({ row }: { row: AuditRow }) {
         )}
       </div>
       <div className="mt-1 text-xs text-neutral-600">
-        ledger {ev.ledger} · tx <span className="font-mono">{ev.txHash.slice(0, 10)}…</span>
+        ledger {ev.ledger} · tx <TxLink hash={ev.txHash} />
       </div>
     </li>
   );
@@ -355,8 +362,4 @@ function badgeCls(type: ConfidentialEvent["type"]): string {
     default:
       return "bg-neutral-800 text-neutral-300";
   }
-}
-
-function shortAddr(a: string): string {
-  return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }

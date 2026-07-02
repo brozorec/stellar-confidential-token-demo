@@ -4,7 +4,7 @@
  * representative" lives here.
  */
 
-import { FR_MODULUS } from "./constants.js";
+import { FR_MODULUS, FP_MODULUS } from "./constants.js";
 
 /** Reduce into `[0, r)`. */
 export function frMod(x: bigint): bigint {
@@ -20,6 +20,19 @@ export function frAdd(a: bigint, b: bigint): bigint {
 /** Field subtraction mod `r`. */
 export function frSub(a: bigint, b: bigint): bigint {
   return frMod(a - b);
+}
+
+/**
+ * Grumpkin SCALAR addition mod `p` (the group order), for accumulating
+ * commitment blinding factors under homomorphic point addition:
+ * `C1 + C2 = commit(v1 + v2, (r1 + r2) mod p)`. Reducing mod `r` here instead
+ * silently opens the wrong commitment whenever the integer sum crosses `p`
+ * (~50% of the time for two full-size blindings) — the resulting opening is
+ * off by `p - r` and no longer matches the on-chain point (DESIGN §2.3).
+ */
+export function fpAdd(a: bigint, b: bigint): bigint {
+  const s = (a + b) % FP_MODULUS;
+  return s < 0n ? s + FP_MODULUS : s;
 }
 
 /** True iff `x` is a canonical representative (`0 <= x < r`). */

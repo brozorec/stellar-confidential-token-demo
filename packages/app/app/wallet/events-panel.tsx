@@ -7,7 +7,7 @@
  *
  * Transfers are split by direction — received vs. sent — and each hosts the
  * holder side of the matching selective-disclosure flow
- * (SELECTIVE_DISCLOSURE.md §12): paste a verifier's request (P_R, ν),
+ * (SELECTIVE_DISCLOSURE.md §12): paste a disclosure receiver's request (P_R, ν),
  * generate a D-recipient or D-sender proof in-browser, copy the bundle back.
  */
 
@@ -17,6 +17,8 @@ import type { ConfidentialWallet } from "@/lib/wallet";
 import { useActiveDeployment } from "@/lib/active-deployment";
 import { errMsg } from "@/lib/err";
 import { CopyButton } from "../copy-button";
+import { Addr } from "../addr";
+import { TxLink } from "../tx-link";
 
 export function EventsPanel({ wallet, reloadKey = 0 }: { wallet: ConfidentialWallet; reloadKey?: number }) {
   const { active } = useActiveDeployment();
@@ -85,23 +87,40 @@ function EventRow({ ev, wallet }: { ev: ConfidentialEvent; wallet: ConfidentialW
   const canDisclose =
     direction === "received" || (direction === "sent" && wallet.canDiscloseSent(ev as TransferEvent));
 
+  // Transfer amounts are confidential on-chain but decryptable by either party.
+  // Decrypt for display; `loading` until resolved, `value` null if unrecoverable.
+  const [amt, setAmt] = useState<{ loading: boolean; value: bigint | null }>({
+    loading: ev.type === "transfer",
+    value: null,
+  });
+  useEffect(() => {
+    if (ev.type !== "transfer") return;
+    let cancelled = false;
+    wallet
+      .transferAmount(ev as TransferEvent)
+      .then((value) => !cancelled && setAmt({ loading: false, value }))
+      .catch(() => !cancelled && setAmt({ loading: false, value: null }));
+    return () => {
+      cancelled = true;
+    };
+  }, [ev, wallet]);
+
   return (
     <li className="rounded border border-neutral-900 bg-neutral-500/10 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className={`rounded px-2 py-0.5 text-xs font-medium ${badgeCls(ev.type, direction)}`}>
           {direction ?? ev.type}
         </span>
-        <span className="text-xs text-neutral-500">ledger {ev.ledger}</span>
-        <span className="font-mono text-xs text-neutral-500">tx {ev.txHash.slice(0, 10)}…</span>
         <span className="flex-1" />
         {direction && canDisclose && (
           <button
             onClick={() => setShowDisclose((v) => !v)}
             className="rounded bg-indigo-900/70 px-2 py-1 text-xs font-medium text-indigo-200 hover:bg-indigo-800"
           >
-            {showDisclose ? "Close disclosure" : "Disclose amount…"}
+            {showDisclose ? "Close disclosure" : "Disclose amount"}
           </button>
         )}
+        <TxLink hash={ev.txHash} variant="button" />
         {direction === "sent" && !canDisclose && (
           <span
             className="text-xs text-neutral-600"
@@ -111,7 +130,9 @@ function EventRow({ ev, wallet }: { ev: ConfidentialEvent; wallet: ConfidentialW
           </span>
         )}
       </div>
-      <div className="mt-1.5 text-xs text-neutral-400">{summary(ev, wallet.address)}</div>
+      <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-neutral-400">
+        {summary(ev, wallet.address, ev.type === "transfer" ? amt : undefined)}
+      </div>
       {showDisclose && direction && (
         <DiscloseFlow ev={ev as TransferEvent} direction={direction} wallet={wallet} />
       )}
@@ -206,21 +227,77 @@ function parseRequest(json: string): DisclosureRequest {
   return r;
 }
 
-function summary(ev: ConfidentialEvent, me: string): string {
-  const who = (a: string) => (a === me ? "you" : `${a.slice(0, 6)}…${a.slice(-4)}`);
+/** A distinct mono amount chip. Public amounts and locally-decrypted transfer
+ *  amounts share the styling; `title` carries the confidentiality note. */
+function Amt({ children, title }: { children: React.ReactNode; title?: string }) {
+  return (
+    <span
+      title={title}
+      className="rounded bg-neutral-700/70 px-1.5 py-0.5 font-mono text-xs font-semibold text-neutral-100"
+    >
+      {children}
+    </span>
+  );
+}
+
+const You = () => <span className="font-medium text-neutral-200">you</span>;
+const Muted = ({ children }: { children: React.ReactNode }) => (
+  <span className="text-neutral-500">{children}</span>
+);
+
+/** For a transfer row, render the decrypted amount, a loading hint, or fall
+ *  back to "confidential" when this wallet can't recover it. */
+function TransferAmount({ amt }: { amt: { loading: boolean; value: bigint | null } }) {
+  if (amt.loading) return <Muted>decrypting…</Muted>;
+  if (amt.value === null) return <Muted>amount confidential</Muted>;
+  return <Amt title="Decrypted with your key — still confidential on-chain">{amt.value.toString()}</Amt>;
+}
+
+function summary(
+  ev: ConfidentialEvent,
+  me: string,
+  transferAmt?: { loading: boolean; value: bigint | null },
+) {
+  const who = (a: string) => (a === me ? <You /> : <Addr value={a} className="text-neutral-200" />);
   switch (ev.type) {
     case "register":
-      return `${who(ev.account)} registered (auditor #${ev.auditorId})`;
+      return (
+        <>
+          <span>with</span> <Muted>auditor #{ev.auditorId}</Muted>
+        </>
+      );
     case "deposit":
-      return `${who(ev.from)} deposited ${ev.amount} (public) → ${who(ev.to)}`;
+      return (
+        <>
+          <Amt>{ev.amount}</Amt> <Muted>(public)</Muted>
+        </>
+      );
     case "merge":
-      return `${who(ev.account)} merged receiving → spendable`;
+      return (
+        <Muted>receiving → spendable</Muted>
+      );
     case "withdraw":
-      return `${who(ev.from)} withdrew ${ev.amount} (public) → ${who(ev.to)}`;
-    case "transfer":
-      return ev.to === me
-        ? `from ${who(ev.from)} · amount confidential (ṽ on-chain)`
-        : `to ${who(ev.to)} · amount confidential (ṽ on-chain)`;
+      return (
+        <>
+          <Amt>{ev.amount}</Amt> <Muted>(public)</Muted>
+        </>
+      );
+    case "transfer": {
+      const amt = transferAmt ?? { loading: false, value: null };
+      return ev.to === me ? (
+        <>
+          <span className="font-medium text-emerald-300">from</span> {who(ev.from)}{" "}
+          <span className="text-neutral-600">·</span> <TransferAmount amt={amt} />
+          <Muted>(confidential)</Muted>
+        </>
+      ) : (
+        <>
+          <span className="font-medium text-orange-300">to</span> {who(ev.to)}{" "}
+          <span className="text-neutral-600">·</span> <TransferAmount amt={amt} />
+          <Muted>(confidential)</Muted>
+        </>
+      );
+    }
     default:
       // Compliance/policy events are not shown in the wallet activity list.
       return ev.type;

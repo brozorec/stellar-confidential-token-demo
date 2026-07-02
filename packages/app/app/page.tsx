@@ -3,14 +3,15 @@
 /**
  * Landing page: a persona chooser. Pick a role and land on that persona's page.
  * The same links live in the top bar of every page (app/nav.tsx). The roster
- * and the footer reflect the active deployment — the Token Admin role appears
- * only for compliant deployments, and an Advanced-mode card lets the user
- * configure and deploy their own confidential token.
+ * reflects the active deployment — the Token Admin role appears only for
+ * compliant deployments. The deployment axis itself (Default ↔ Advanced, and
+ * deploying your own) is managed from the top bar, not here.
  */
 
 import Link from "next/link";
 import { useActiveDeployment } from "@/lib/active-deployment";
-import { hasAdmin, kindLabel } from "@/lib/deployment";
+import { hasAdmin } from "@/lib/deployment";
+import { ServingBadge } from "./serving-badge";
 
 const PERSONA_CARDS = [
   {
@@ -27,7 +28,7 @@ const PERSONA_CARDS = [
   },
   {
     href: "/verify",
-    title: "Verifier",
+    title: "Disclosure receiver",
     tagline: "verifying counterparty",
     accent: "border-cyan-500/40 hover:border-cyan-400/70",
     cta: "Verify a disclosure →",
@@ -52,7 +53,7 @@ const PERSONA_CARDS = [
 
 const ADMIN_CARD = {
   href: "/admin",
-  title: "Token Admin",
+  title: "Token admin",
   tagline: "deployment owner",
   accent: "border-rose-500/40 hover:border-rose-400/70",
   cta: "Open admin dashboard →",
@@ -65,7 +66,7 @@ const ADMIN_CARD = {
 
 export default function LandingPage() {
   const { active } = useActiveDeployment();
-  const cards = hasAdmin(active.kind) ? [...PERSONA_CARDS, ADMIN_CARD] : PERSONA_CARDS;
+  const cards = hasAdmin(active.kind) ? [ADMIN_CARD, ...PERSONA_CARDS] : PERSONA_CARDS;
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-12">
@@ -76,9 +77,7 @@ export default function LandingPage() {
           UltraHonk proof. Amounts stay private, disclosed only to the parties entitled to see
           them. Select a role to begin.
         </p>
-        <p className="mt-3 text-xs text-neutral-500">
-          Serving <span className="font-medium text-neutral-300">{active.label}</span> ({kindLabel(active.kind)}).
-        </p>
+        <ServingBadge className="mt-4" />
       </header>
 
       <div className="space-y-4">
@@ -96,34 +95,7 @@ export default function LandingPage() {
             <span className={`mt-3 inline-block text-sm font-medium ${p.ctaCls}`}>{p.cta}</span>
           </Link>
         ))}
-
-        <Link
-          href="/advanced"
-          className="block rounded-lg border border-dashed border-emerald-500/40 bg-emerald-900/10 p-5 transition-colors hover:border-emerald-400/70"
-        >
-          <div className="flex items-baseline gap-2">
-            <h2 className="text-lg font-medium">Advanced mode</h2>
-            <span className="text-sm text-neutral-500">— deploy your own token</span>
-          </div>
-          <p className="mt-2 text-sm leading-relaxed text-neutral-400">
-            Pick an underlying SEP-41 asset and a compliance configuration, then deploy your own
-            confidential token through the shared factory (the verifier and auditor stay constant).
-            The app switches to serve your deployment.
-          </p>
-          <span className="mt-3 inline-block text-sm font-medium text-emerald-300">Configure & deploy →</span>
-        </Link>
       </div>
-
-      <footer className="mt-10 font-mono text-xs text-neutral-600">
-        token {short(active.contracts.token)} · verifier {short(active.contracts.verifier)} ·
-        auditor {short(active.contracts.auditor)}
-        {active.contracts.policy ? <> · policy {short(active.contracts.policy)}</> : null} · Stellar
-        testnet · unaudited reference demo
-      </footer>
     </main>
   );
-}
-
-function short(id: string): string {
-  return id ? `${id.slice(0, 4)}…${id.slice(-4)}` : "—";
 }

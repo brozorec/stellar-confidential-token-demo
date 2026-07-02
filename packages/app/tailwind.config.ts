@@ -19,7 +19,9 @@ import plugin from "tailwindcss/plugin";
  * script (app/layout.tsx) sets the class before paint to avoid a flash.
  *
  * Brand blue ≈ Tailwind indigo (OZ's hsl(238 94% 65%)). Persona accents:
- * account holder = indigo, verifier = cyan, auditor = amber.
+ * account holder = indigo, disclosure receiver = cyan, auditor = amber, token admin = rose
+ * (every accent family must be listed in FAMILIES below, or it won't mirror and
+ * will read as a pale, disabled-looking color in light mode).
  */
 
 const FAMILIES = [
@@ -33,6 +35,7 @@ const FAMILIES = [
   "red",
   "orange",
   "purple",
+  "rose",
 ] as const;
 
 const SHADES = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;

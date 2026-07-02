@@ -1,15 +1,17 @@
 "use client";
 
 /**
- * Top bar: a Deployment dropdown (default ↔ advanced + a link to deploy your
- * own) and a Role dropdown (the personas — account holder, verifier, auditor,
- * and token admin for compliant deployments). Accents follow the OZ-tuned
- * palette: account holder = indigo (brand), verifier = cyan, auditor = amber,
- * admin = rose.
+ * Top bar: a Deployment toggle (Default ↔ Advanced; clicking Advanced with no
+ * deployment yet routes to /advanced to create one) and a Role dropdown (the
+ * personas — account holder, disclosure receiver, auditor, and token admin for
+ * compliant deployments). Reconfigure/redeploy of an existing advanced
+ * deployment lives on the Token Admin dashboard, not here. Accents follow the
+ * OZ-tuned palette: account holder = indigo (brand), disclosure receiver =
+ * cyan, auditor = amber, admin = rose.
  */
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ThemeToggle } from "./theme-toggle";
 import { useActiveDeployment } from "@/lib/active-deployment";
@@ -17,13 +19,13 @@ import { hasAdmin } from "@/lib/deployment";
 
 export const PERSONAS = [
   { href: "/wallet", label: "Account holder", text: "text-indigo-300" },
-  { href: "/verify", label: "Verifier", text: "text-cyan-300" },
+  { href: "/verify", label: "Disclosure receiver", text: "text-cyan-300" },
   { href: "/auditor", label: "Auditor", text: "text-amber-300" },
 ] as const;
 
 /** Token-admin persona — only meaningful for compliant deployments (vanilla has
  * no owner), so the Role menu shows it conditionally. */
-const ADMIN_PERSONA = { href: "/admin", label: "Token Admin", text: "text-rose-300" } as const;
+const ADMIN_PERSONA = { href: "/admin", label: "Token admin", text: "text-rose-300" } as const;
 
 type Persona = { href: string; label: string; text: string };
 
@@ -68,11 +70,15 @@ function Dropdown({
   label,
   triggerText,
   triggerCls = "text-neutral-200",
+  disabled = false,
+  disabledTitle,
   children,
 }: {
   label: string;
   triggerText: string;
   triggerCls?: string;
+  disabled?: boolean;
+  disabledTitle?: string;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -100,16 +106,18 @@ function Dropdown({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
+        disabled={disabled}
+        title={disabled ? disabledTitle : undefined}
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`flex items-center gap-1.5 rounded border px-2.5 py-1 text-xs font-medium transition-colors hover:border-neutral-600 ${
+        className={`flex items-center gap-1.5 rounded border px-2.5 py-1.5 text-xs font-medium transition-colors hover:border-neutral-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-neutral-800 ${
           open ? "border-neutral-600" : "border-neutral-800"
         } ${triggerCls}`}
       >
         {triggerText}
         <Chevron />
       </button>
-      {open && (
+      {open && !disabled && (
         <div
           role="menu"
           onClick={() => setOpen(false)}
@@ -122,47 +130,81 @@ function Dropdown({
   );
 }
 
-function DeploymentDropdown() {
+const SEG_BASE = "rounded px-2.5 py-1 text-xs font-medium transition-colors";
+
+/** Default ↔ Advanced switch. `Advanced` toggles the active slot when a
+ * deployment exists; with none yet it routes to /advanced to create one (the
+ * discovery/creation path, since the home page no longer carries a card).
+ * Reconfigure/redeploy of an existing deployment lives on the admin dashboard. */
+function DeploymentToggle() {
+  const router = useRouter();
+  const pathname = usePathname();
   const { advanced, which, setWhich } = useActiveDeployment();
+
+  // The /advanced config page is the Advanced context even before a deployment
+  // exists, so the Advanced segment lights up there too — otherwise clicking it
+  // (which routes to /advanced to create one) would leave Default highlighted.
+  const advancedContext = which === "advanced" || pathname.startsWith("/advanced");
+
+  const selectDefault = () => {
+    setWhich("default");
+    // Clicking Default from the config page returns to a neutral landing so the
+    // toggle doesn't stay stuck on Advanced (pathname would otherwise keep it lit).
+    if (pathname.startsWith("/advanced")) router.push("/");
+  };
+
+  const selectAdvanced = () => {
+    if (advanced) setWhich("advanced");
+    else router.push("/advanced");
+  };
+
   return (
-    <Dropdown
-      label="Deployment"
-      triggerText={which === "advanced" ? "Advanced" : "Default"}
-      triggerCls={which === "advanced" ? "text-emerald-300" : "text-neutral-200"}
-    >
-      <button
-        type="button"
-        role="menuitem"
-        onClick={() => setWhich("default")}
-        className={itemCls(which === "default", "bg-neutral-800 text-emerald-300")}
-      >
-        Default · vanilla
-      </button>
-      {advanced && (
+    <div className="flex items-center gap-1.5">
+      <span className="hidden text-xs text-neutral-600 sm:inline">Deployment</span>
+      <div className="inline-flex items-center rounded-md border border-neutral-800 p-0.5">
         <button
           type="button"
-          role="menuitem"
-          onClick={() => setWhich("advanced")}
-          className={itemCls(which === "advanced", "bg-neutral-800 text-emerald-300")}
+          aria-pressed={!advancedContext}
+          onClick={selectDefault}
+          className={`${SEG_BASE} ${
+            !advancedContext ? "bg-neutral-800 text-neutral-100" : "text-neutral-400 hover:text-neutral-200"
+          }`}
         >
-          {advanced.label}
+          Default
         </button>
-      )}
-      <div className="my-1 border-t border-neutral-800" />
-      <Link role="menuitem" href="/advanced" className={itemCls(false)}>
-        {advanced ? "Reconfigure / redeploy…" : "Deploy your own…"}
-      </Link>
-    </Dropdown>
+        <button
+          type="button"
+          aria-pressed={advancedContext}
+          onClick={selectAdvanced}
+          title={advanced ? undefined : "Deploy your own token"}
+          className={`${SEG_BASE} ${
+            advancedContext ? "bg-neutral-800 text-emerald-300" : "text-neutral-400 hover:text-neutral-200"
+          }`}
+        >
+          Advanced
+        </button>
+      </div>
+    </div>
   );
 }
 
 function RoleDropdown() {
   const pathname = usePathname();
-  const { active } = useActiveDeployment();
+  const { active, advanced, which } = useActiveDeployment();
+  // No deployment to serve a persona against yet: in the advanced context (the
+  // /advanced config page, or advanced active) with nothing deployed, there's
+  // no role to play, so the picker is disabled until a token is deployed.
+  const disabled = (which === "advanced" || pathname.startsWith("/advanced")) && !advanced;
   const personas: readonly Persona[] = hasAdmin(active.kind) ? [...PERSONAS, ADMIN_PERSONA] : PERSONAS;
   const current = personas.find((p) => pathname.startsWith(p.href));
   return (
-    <Dropdown label="Role" triggerText={current?.label ?? "Choose role"} triggerCls={current?.text ?? "text-neutral-400"}>
+    <Dropdown
+      label="Role"
+      triggerText={current?.label ?? "Choose role"}
+      triggerCls={current?.text ?? "text-neutral-400"}
+      disabled={disabled}
+      disabledTitle="Deploy your own token first to choose a role"
+    >
       {personas.map((p) => (
         <Link
           key={p.href}
@@ -186,7 +228,7 @@ export function PersonaNav() {
           <span className="hidden text-sm text-neutral-500 sm:inline">Stellar Confidential Token</span>
         </Link>
         <span className="flex-1" />
-        <DeploymentDropdown />
+        <DeploymentToggle />
         <span className="mx-0.5 hidden h-4 w-px bg-neutral-800 sm:inline-block" />
         <RoleDropdown />
         <ThemeToggle />
