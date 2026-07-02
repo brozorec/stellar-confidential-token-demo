@@ -24,8 +24,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx test/smoke.mjs && tsx test/parity.mjs && tsx test/payload.mjs && tsx test/auditor.mjs && tsx test/ephemeral.mjs && tsx test/dedup.mjs && tsx test/compliance-events.mjs && tsx test/contract-errors.mjs && tsx test/indexer-parity.mjs && tsx test/prove.mjs && tsx test/disclosure.mjs",
-    "test:fast": "tsx test/smoke.mjs && tsx test/parity.mjs && tsx test/payload.mjs && tsx test/auditor.mjs && tsx test/ephemeral.mjs && tsx test/dedup.mjs && tsx test/compliance-events.mjs && tsx test/contract-errors.mjs && tsx test/indexer-parity.mjs"
+    "test": "tsx test/smoke.mjs && tsx test/parity.mjs && tsx test/payload.mjs && tsx test/auditor.mjs && tsx test/ephemeral.mjs && tsx test/dedup.mjs && tsx test/compliance-events.mjs && tsx test/contract-errors.mjs && tsx test/indexer-parity.mjs && tsx test/hybrid-indexer-failure.mjs && tsx test/prove.mjs && tsx test/disclosure.mjs",
+    "test:fast": "tsx test/smoke.mjs && tsx test/parity.mjs && tsx test/payload.mjs && tsx test/auditor.mjs && tsx test/ephemeral.mjs && tsx test/dedup.mjs && tsx test/compliance-events.mjs && tsx test/contract-errors.mjs && tsx test/indexer-parity.mjs && tsx test/hybrid-indexer-failure.mjs"
   },
   "dependencies": {
     "@aztec/bb.js": "0.87.0",
