@@ -299,9 +299,17 @@ export default function AdminPage() {
       >
         <Notice tone="warn">
           You are connected as <Addr value={account} />, but this token&apos;s admin is{" "}
-          {owner ? <Addr value={owner} /> : <span className="font-mono">unknown</span>}. Connect with
-          the admin account in Freighter to manage compliance.
+          {owner ? <Addr value={owner} /> : <span className="font-mono">unknown</span>}. Switch to
+          the admin account in Freighter, then reconnect below.
         </Notice>
+        <button
+          onClick={connect}
+          disabled={busy !== null}
+          className="mt-3 rounded bg-rose-600 px-4 py-2 text-sm font-medium hover:bg-rose-500 disabled:opacity-50"
+        >
+          {busy === "connecting" ? "Connecting…" : "Connect with Freighter"}
+        </button>
+        {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
       </PageShell>
     );
   }
