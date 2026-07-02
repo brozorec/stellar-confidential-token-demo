@@ -9,9 +9,14 @@
  *     frozen set is replayed from `frozen`/`unfrozen` events.
  *  3. Policy panel (allowlist/blocklist) — allow/disallow or block/unblock; the
  *     membership set is replayed from `user_*` events on the policy contract.
+ *  4. Redeploy — the only way to reconfigure/redeploy an advanced deployment,
+ *     so it's also shown (without the panels above) for a vanilla token
+ *     deployed in advanced mode, which has no owner or compliance to manage.
  *
- * Access requires a Freighter connection whose account is the token owner. The
- * page reads the owner publicly; mutations are owner-gated on-chain (#[only_owner]).
+ * Access to the compliance panels requires a Freighter connection whose
+ * account is the token owner. The page reads the owner publicly; mutations
+ * are owner-gated on-chain (#[only_owner]). A vanilla deployment has no owner,
+ * so it skips this gate entirely.
  */
 
 import Link from "next/link";
@@ -29,6 +34,7 @@ import {
   type ComplianceEventType,
 } from "@ctd/sdk";
 import { useActiveDeployment } from "@/lib/active-deployment";
+import { hasAdminDashboard } from "@/lib/deployment";
 import { connectFreighter, type MessageSigner } from "@/lib/freighter";
 import { clientsFor } from "@/lib/rpc";
 import { errMsg } from "@/lib/err";
@@ -76,9 +82,37 @@ function replaySet(
   return [...s];
 }
 
+/** Redeploy — start over with a brand-new token. Kept apart from the
+    compliance panels because it replaces the whole deployment, not a setting
+    within it. Shown for any deployment created in advanced mode (compliant or
+    vanilla), since this dashboard is the only place to reach it. */
+function RedeploySection() {
+  return (
+    <section className="mt-8 rounded border border-neutral-800 bg-neutral-900/30 p-4">
+      <h2 className="mb-1 font-medium">Redeploy a new token</h2>
+      <p className="mb-3 text-xs leading-relaxed text-neutral-400">
+        Reconfigure and deploy a brand-new confidential token through the factory. This does not
+        modify the current token — it replaces it as your active advanced deployment, so you start
+        from scratch: no registered accounts, balances, or compliance history carry over, and the
+        account you deploy with becomes the new owner.
+      </p>
+      <Link
+        href="/advanced"
+        className="inline-flex items-center gap-1.5 rounded border border-neutral-700 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:border-neutral-600 hover:bg-neutral-800"
+      >
+        <Gear />
+        Reconfigure &amp; redeploy →
+      </Link>
+    </section>
+  );
+}
+
 export default function AdminPage() {
-  const { active, which } = useActiveDeployment();
+  const { active } = useActiveDeployment();
   const isVanilla = active.kind === "vanilla";
+  // Any token deployed through the advanced wizard, vanilla included — the
+  // built-in default is the only deployment excluded from this dashboard.
+  const isCustomDeployment = hasAdminDashboard(active);
   const hasPolicy = active.kind === "allowlist" || active.kind === "blocklist";
 
   const [signer, setSigner] = useState<MessageSigner | null>(null);
@@ -193,7 +227,8 @@ export default function AdminPage() {
 
   // ---- gating views -------------------------------------------------------
 
-  if (isVanilla) {
+  if (isVanilla && !isCustomDeployment) {
+    // The built-in default: no owner, no compliance, nothing to redeploy.
     return (
       <PageShell
         title="Token admin"
@@ -201,12 +236,31 @@ export default function AdminPage() {
       >
         <Notice>
           This deployment is a <b>vanilla</b> token — it has no owner, freeze, or policy, so there
-          is no admin dashboard. Switch to (or deploy) a compliant configuration in{" "}
+          is no admin dashboard. Deploy a token of your own (compliant or not) in{" "}
           <a className="underline" href="/advanced">
             advanced mode
-          </a>
-          .
+          </a>{" "}
+          to unlock this page.
         </Notice>
+      </PageShell>
+    );
+  }
+
+  if (isVanilla) {
+    // A custom vanilla deployment has no owner or compliance to manage, but
+    // this dashboard is still the only way to redeploy it with a different
+    // configuration — skip the Freighter/owner gate entirely, since there's
+    // no owner for a vanilla token.
+    return (
+      <PageShell
+        title="Token admin"
+        subtitle="Manage compliance for the active confidential token: registered accounts, freezes, and (for allowlist/blocklist configs) policy membership."
+      >
+        <Notice>
+          This deployment is a <b>vanilla</b> token — it has no owner, freeze, or policy, so there
+          is nothing to manage here. You can still redeploy with a different configuration below.
+        </Notice>
+        <RedeploySection />
       </PageShell>
     );
   }
@@ -385,27 +439,7 @@ export default function AdminPage() {
         )}
       </div>
 
-      {/* Redeploy — start over with a brand-new token. Kept apart from the
-          compliance panels because it replaces the whole deployment, not a
-          setting within it. */}
-      {which === "advanced" && (
-        <section className="mt-8 rounded border border-neutral-800 bg-neutral-900/30 p-4">
-          <h2 className="mb-1 font-medium">Redeploy a new token</h2>
-          <p className="mb-3 text-xs leading-relaxed text-neutral-400">
-            Reconfigure and deploy a brand-new confidential token through the factory. This does
-            not modify the current token — it replaces it as your active advanced deployment, so
-            you start from scratch: no registered accounts, balances, or compliance history carry
-            over, and the account you deploy with becomes the new owner.
-          </p>
-          <Link
-            href="/advanced"
-            className="inline-flex items-center gap-1.5 rounded border border-neutral-700 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:border-neutral-600 hover:bg-neutral-800"
-          >
-            <Gear />
-            Reconfigure &amp; redeploy →
-          </Link>
-        </section>
-      )}
+      {isCustomDeployment && <RedeploySection />}
     </PageShell>
   );
 }

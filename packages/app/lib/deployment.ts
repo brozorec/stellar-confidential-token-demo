@@ -103,7 +103,14 @@ export function kindLabel(kind: CtKind): string {
   }
 }
 
-/** Whether a deployment kind has a token owner/admin (vanilla has none). */
-export function hasAdmin(kind: CtKind): boolean {
-  return kind !== "vanilla";
+/**
+ * Whether a deployment exposes the Token Admin dashboard. True for compliant
+ * kinds (owner-gated compliance management) and also for a vanilla token
+ * deployed in advanced mode — it has no owner or compliance to manage, but the
+ * dashboard is the only place to redeploy, so it must stay reachable. The
+ * built-in default is excluded either way: nothing to manage, nothing to
+ * redeploy.
+ */
+export function hasAdminDashboard(deployment: Pick<Deployment, "id">): boolean {
+  return deployment.id !== "default";
 }

@@ -4,10 +4,10 @@
  * Top bar: a Deployment toggle (Default ↔ Advanced; clicking Advanced with no
  * deployment yet routes to /advanced to create one) and a Role dropdown (the
  * personas — account holder, disclosure receiver, auditor, and token admin for
- * compliant deployments). Reconfigure/redeploy of an existing advanced
- * deployment lives on the Token Admin dashboard, not here. Accents follow the
- * OZ-tuned palette: account holder = indigo (brand), disclosure receiver =
- * cyan, auditor = amber, admin = rose.
+ * any deployment created in advanced mode, compliant or not). Reconfigure/
+ * redeploy of an existing advanced deployment lives on the Token Admin
+ * dashboard, not here. Accents follow the OZ-tuned palette: account holder =
+ * indigo (brand), disclosure receiver = cyan, auditor = amber, admin = rose.
  */
 
 import Link from "next/link";
@@ -15,7 +15,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ThemeToggle } from "./theme-toggle";
 import { useActiveDeployment } from "@/lib/active-deployment";
-import { hasAdmin } from "@/lib/deployment";
+import { hasAdminDashboard } from "@/lib/deployment";
 
 export const PERSONAS = [
   { href: "/wallet", label: "Account holder", text: "text-indigo-300" },
@@ -23,8 +23,9 @@ export const PERSONAS = [
   { href: "/auditor", label: "Auditor", text: "text-amber-300" },
 ] as const;
 
-/** Token-admin persona — only meaningful for compliant deployments (vanilla has
- * no owner), so the Role menu shows it conditionally. */
+/** Token-admin persona — shown for any deployment created in advanced mode
+ * (compliant or vanilla), since its dashboard is also the only place to
+ * redeploy. The built-in default has neither, so the Role menu hides it. */
 const ADMIN_PERSONA = { href: "/admin", label: "Token admin", text: "text-rose-300" } as const;
 
 type Persona = { href: string; label: string; text: string };
@@ -195,7 +196,7 @@ function RoleDropdown() {
   // /advanced config page, or advanced active) with nothing deployed, there's
   // no role to play, so the picker is disabled until a token is deployed.
   const disabled = (which === "advanced" || pathname.startsWith("/advanced")) && !advanced;
-  const personas: readonly Persona[] = hasAdmin(active.kind) ? [...PERSONAS, ADMIN_PERSONA] : PERSONAS;
+  const personas: readonly Persona[] = hasAdminDashboard(active) ? [...PERSONAS, ADMIN_PERSONA] : PERSONAS;
   const current = personas.find((p) => pathname.startsWith(p.href));
   return (
     <Dropdown

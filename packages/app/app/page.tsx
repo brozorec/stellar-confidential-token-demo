@@ -3,14 +3,16 @@
 /**
  * Landing page: a persona chooser. Pick a role and land on that persona's page.
  * The same links live in the top bar of every page (app/nav.tsx). The roster
- * reflects the active deployment — the Token Admin role appears only for
- * compliant deployments. The deployment axis itself (Default ↔ Advanced, and
- * deploying your own) is managed from the top bar, not here.
+ * reflects the active deployment — the Token Admin role appears for any
+ * deployment created in advanced mode (compliant or vanilla — its dashboard is
+ * also the redeploy portal), but not for the built-in default. The deployment
+ * axis itself (Default ↔ Advanced, and deploying your own) is managed from the
+ * top bar, not here.
  */
 
 import Link from "next/link";
 import { useActiveDeployment } from "@/lib/active-deployment";
-import { hasAdmin } from "@/lib/deployment";
+import { hasAdminDashboard } from "@/lib/deployment";
 import { ServingBadge } from "./serving-badge";
 
 const PERSONA_CARDS = [
@@ -60,13 +62,13 @@ const ADMIN_CARD = {
   ctaCls: "text-rose-300",
   blurb:
     "The owner of a compliant token: see every registered account, freeze/unfreeze accounts, and " +
-    "(for allowlist/blocklist configs) manage who is permitted to transact. Requires the admin's " +
-    "Freighter account.",
+    "(for allowlist/blocklist configs) manage who is permitted to transact. For a vanilla " +
+    "configuration deployed in advanced mode, this is instead where you redeploy.",
 } as const;
 
 export default function LandingPage() {
   const { active } = useActiveDeployment();
-  const cards = hasAdmin(active.kind) ? [ADMIN_CARD, ...PERSONA_CARDS] : PERSONA_CARDS;
+  const cards = hasAdminDashboard(active) ? [ADMIN_CARD, ...PERSONA_CARDS] : PERSONA_CARDS;
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-12">
