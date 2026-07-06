@@ -23,8 +23,12 @@ stellar contract build
 
 declare -A WASMS=(
   ["confidential_token_contract"]="confidential_token"
+  ["token_with_compliance_contract"]="token_with_compliance"
   ["confidential_verifier_contract"]="confidential_verifier"
   ["confidential_auditor_contract"]="confidential_auditor"
+  ["allowlist_contract"]="allowlist"
+  ["blocklist_contract"]="blocklist"
+  ["token_factory_contract"]="token_factory"
 )
 
 WASM_DIR="target/$TARGET/release"

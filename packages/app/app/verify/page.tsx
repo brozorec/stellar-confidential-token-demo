@@ -16,11 +16,9 @@
  *      from @ctd/disclosure, and decrypts the disclosed amount.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ChainClient,
-  IndexerClient,
-  CircuitProver,
+  type CircuitProver,
   proverFromArtifact,
   generateRecipientKeys,
   recipientKeysFromSecret,
@@ -39,10 +37,14 @@ import discloseRecipientVk from "@ctd/disclosure/artifacts/disclose_recipient.vk
 import discloseSenderCircuit from "@ctd/disclosure/artifacts/disclose_sender.json";
 import discloseSenderVk from "@ctd/disclosure/artifacts/disclose_sender.vk.json";
 
-import { DEPLOYMENT } from "@/lib/deployment";
+import { useActiveDeployment } from "@/lib/active-deployment";
 import { ensureBrowserBackend } from "@/lib/bb-loader";
+import { clientsFor } from "@/lib/rpc";
 import { errMsg } from "@/lib/err";
 import { CopyButton } from "../copy-button";
+import { PageShell } from "../page-shell";
+import { Addr } from "../addr";
+import { TxLink } from "../tx-link";
 
 const RR_KEY = "ctd:disclosure:rR";
 const REQUEST_KEY = "ctd:disclosure:request";
@@ -61,12 +63,33 @@ function vkBytes(base64: string): Uint8Array {
 }
 
 export default function VerifyPage() {
+  const { active } = useActiveDeployment();
   const [keys, setKeys] = useState<RecipientKeys | null>(null);
   const [request, setRequest] = useState<DisclosureRequest | null>(null);
   const [bundleJson, setBundleJson] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<VerifiedDisclosure | null>(null);
   const [error, setError] = useState<{ stage: string; message: string } | null>(null);
+
+  // Provers are the expensive part of verifying (bb.js worker + WASM init), so
+  // they're cached per circuit across repeat verifications and only freed when
+  // this page unmounts.
+  const proversRef = useRef<Map<keyof typeof ARTIFACTS, CircuitProver>>(new Map());
+  useEffect(() => {
+    const provers = proversRef.current;
+    return () => {
+      for (const p of provers.values()) void p.destroy();
+      provers.clear();
+    };
+  }, []);
+  const proverFor = useCallback((circuitId: keyof typeof ARTIFACTS): CircuitProver => {
+    let p = proversRef.current.get(circuitId);
+    if (!p) {
+      p = proverFromArtifact(ARTIFACTS[circuitId].circuit as never);
+      proversRef.current.set(circuitId, p);
+    }
+    return p;
+  }, []);
 
   // Long-lived receiver identity + last issued request, both local-only.
   useEffect(() => {
@@ -99,56 +122,34 @@ export default function VerifyPage() {
     try {
       ensureBrowserBackend();
       const bundle = parseBundle(bundleJson);
-      const client = new ChainClient({
-        rpcUrl: DEPLOYMENT.rpcUrl,
-        networkPassphrase: DEPLOYMENT.networkPassphrase,
-        contracts: DEPLOYMENT.contracts,
-      });
       // With an indexer, ref_E resolves even for transfers older than the RPC's
       // ~7-day window (verifyDisclosure tries the indexer first, then the RPC).
-      const indexer = DEPLOYMENT.indexerUrl
-        ? new IndexerClient({ baseUrl: DEPLOYMENT.indexerUrl })
-        : undefined;
+      const { client, indexer } = clientsFor(active);
       const artifacts = ARTIFACTS[bundle.circuitId];
-      const prover: CircuitProver = proverFromArtifact(artifacts.circuit as never);
-      try {
-        setResult(
-          await verifyDisclosure({
-            client,
-            indexer,
-            bundle,
-            request,
-            keys,
-            prover,
-            pinnedVk: vkBytes(artifacts.vk.vkBase64),
-          }),
-        );
-      } finally {
-        await prover.destroy();
-      }
+      setResult(
+        await verifyDisclosure({
+          client,
+          indexer,
+          bundle,
+          request,
+          keys,
+          prover: proverFor(bundle.circuitId),
+          pinnedVk: vkBytes(artifacts.vk.vkBase64),
+        }),
+      );
     } catch (e) {
       if (e instanceof DisclosureVerifyError) setError({ stage: e.stage, message: e.message });
       else setError({ stage: "input", message: errMsg(e) });
     } finally {
       setBusy(false);
     }
-  }, [keys, request, bundleJson]);
+  }, [keys, request, bundleJson, active, proverFor]);
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Verifier <span className="text-base font-normal text-neutral-500">· disclosure review</span>
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-neutral-400">
-          For a verifying counterparty (a compliance desk, tax authority, or KYC provider) that
-          needs proof of a single fact about one on-chain transfer. You hold no key into the system
-          and learn nothing beyond what is explicitly proved to you. No wallet required: this page
-          reads the chain, verifies the proof against the shared circuit artifacts, and decrypts the
-          amount sealed to your key. Nothing here is published.
-        </p>
-      </header>
-
+    <PageShell
+      title="Disclosure receiver"
+      subtitle="For a verifying counterparty (a compliance desk, tax authority, or KYC provider) that needs proof of a single fact about one on-chain transfer. You hold no key into the system and learn nothing beyond what is explicitly proved to you. No wallet required: this page reads the chain, verifies the proof against the shared circuit artifacts, and decrypts the amount sealed to your key. Nothing here is published."
+    >
       <div className="space-y-6">
         <section className="rounded border border-neutral-800 p-4">
           <h3 className="mb-1 font-medium"><span className="text-cyan-400">1</span> · Your disclosure request</h3>
@@ -212,7 +213,7 @@ export default function VerifyPage() {
             <h3 className="mb-1 font-medium text-red-300">Rejected at: {error.stage}</h3>
             <p className="text-sm text-red-300/90">{error.message}</p>
             <p className="mt-2 text-xs text-red-400/70">
-              Per the verifier protocol, nothing may be learned from a bundle that fails any step.
+              Per the disclosure protocol, nothing may be learned from a bundle that fails any step.
             </p>
           </section>
         )}
@@ -225,26 +226,26 @@ export default function VerifyPage() {
               {result.role === "recipient" ? (
                 <>
                   The on-chain transfer{" "}
-                  <span className="font-mono text-xs">{result.event.txHash.slice(0, 10)}…</span>{" "}
+                  <TxLink hash={result.event.txHash} className="text-xs" />{" "}
                   (ledger {result.event.ledger}) paid{" "}
-                  <span className="font-mono text-xs">{result.disclosingAccount.slice(0, 8)}…</span>{" "}
+                  <Addr value={result.disclosingAccount} className="text-xs" />{" "}
                   exactly this amount.
                 </>
               ) : (
                 <>
                   The on-chain transfer{" "}
-                  <span className="font-mono text-xs">{result.event.txHash.slice(0, 10)}…</span>{" "}
+                  <TxLink hash={result.event.txHash} className="text-xs" />{" "}
                   (ledger {result.event.ledger}) was sent by{" "}
-                  <span className="font-mono text-xs">{result.disclosingAccount.slice(0, 8)}…</span>{" "}
+                  <Addr value={result.disclosingAccount} className="text-xs" />{" "}
                   for exactly this amount, to{" "}
-                  <span className="font-mono text-xs">{result.event.to.slice(0, 8)}…</span>.
+                  <Addr value={result.event.to} className="text-xs" />.
                 </>
               )}{" "}
               You learned nothing else about the account, and this proof is useless to anyone but
               you.
             </p>
             <details className="text-xs text-neutral-400">
-              <summary className="cursor-pointer text-neutral-300">Verifier steps</summary>
+              <summary className="cursor-pointer text-neutral-300">Verification steps</summary>
               <ol className="mt-2 list-decimal space-y-1 pl-5">
                 {result.steps.map((s, i) => (
                   <li key={i}>{s}</li>
@@ -254,12 +255,7 @@ export default function VerifyPage() {
           </section>
         )}
       </div>
-
-      <footer className="mt-10 font-mono text-xs text-neutral-600">
-        circuits disclose_recipient · disclose_sender · VKs pinned from @ctd/disclosure · token{" "}
-        {DEPLOYMENT.contracts.token.slice(0, 4)}…{DEPLOYMENT.contracts.token.slice(-4)}
-      </footer>
-    </main>
+    </PageShell>
   );
 }
 

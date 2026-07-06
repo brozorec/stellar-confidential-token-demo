@@ -25,7 +25,26 @@ export type ConfidentialEventType =
   | "deposit"
   | "merge"
   | "withdraw"
-  | "transfer";
+  | "transfer"
+  | ComplianceEventType;
+
+/**
+ * Compliance + policy membership events. They share one shape — topics
+ * `[symbol, account]` with NO data fields — and are emitted by the
+ * `token_with_compliance` contract (`frozen`/`unfrozen`) and the standalone
+ * allowlist/blocklist policy contracts (`user_*`). Note the on-chain symbol is
+ * the snake_case of the soroban `#[contractevent]` struct name, so the
+ * allowlist's `UserAllowed` struct emits `user_allowed` (NOT `allow`, despite
+ * what the library docstrings say). They do not affect balance openings, so the
+ * StateEngine ignores them; the token-admin dashboard replays them.
+ */
+export type ComplianceEventType =
+  | "frozen"
+  | "unfrozen"
+  | "user_allowed"
+  | "user_disallowed"
+  | "user_blocked"
+  | "user_unblocked";
 
 interface BaseEvent {
   type: ConfidentialEventType;
@@ -80,12 +99,20 @@ export interface TransferEvent extends BaseEvent {
   bAudS: bigint;
 }
 
+/** A compliance/policy membership event ({@link ComplianceEventType}). */
+export interface ComplianceEvent extends BaseEvent {
+  type: ComplianceEventType;
+  /** The account that was frozen/unfrozen or added/removed from a policy list. */
+  account: string;
+}
+
 export type ConfidentialEvent =
   | RegisterEvent
   | DepositEvent
   | MergeEvent
   | WithdrawEvent
-  | TransferEvent;
+  | TransferEvent
+  | ComplianceEvent;
 
 /** The event-name symbols this client understands (topic[0]). Shared by the
  * RPC (XDR) and indexer (Goldsky-JSON) decoders so both accept the same set. */
@@ -95,6 +122,12 @@ export const KNOWN: ReadonlySet<string> = new Set([
   "merge",
   "withdraw",
   "transfer",
+  "frozen",
+  "unfrozen",
+  "user_allowed",
+  "user_disallowed",
+  "user_blocked",
+  "user_unblocked",
 ]);
 
 /**
@@ -158,6 +191,14 @@ export function buildConfidentialEvent(
         vAudS: data.field("v_aud_s"),
         bAudS: data.field("b_aud_s"),
       };
+    case "frozen":
+    case "unfrozen":
+    case "user_allowed":
+    case "user_disallowed":
+    case "user_blocked":
+    case "user_unblocked":
+      // All share the [symbol, account] / empty-data shape (data unused).
+      return { ...base, type: name, account: addr(1) };
     default:
       return null;
   }
@@ -219,9 +260,9 @@ function rpcEventCoords(id: string): { opIndex: number; eventIndex: number } {
  */
 export async function fetchEvents(
   client: ChainClient,
-  opts: { startLedger?: number; startCursor?: string; pageLimit?: number },
+  opts: { startLedger?: number; startCursor?: string; pageLimit?: number; contractId?: string },
 ): Promise<FetchEventsResult> {
-  const tokenId = client.cfg.contracts.token;
+  const tokenId = opts.contractId ?? client.cfg.contracts.token;
   const limit = opts.pageLimit ?? 100;
   const out: ConfidentialEvent[] = [];
   let pageCursor = opts.startCursor;

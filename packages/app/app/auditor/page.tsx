@@ -16,10 +16,8 @@
  * play this persona. Real deployments keep it far away from a browser.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ChainClient,
-  IndexerClient,
   hybridFetchEvents,
   auditTransfer,
   auditWithdraw,
@@ -29,11 +27,14 @@ import {
   fromHex,
   type ConfidentialEvent,
 } from "@ctd/sdk";
-import { DEPLOYMENT } from "@/lib/deployment";
+import { useActiveDeployment } from "@/lib/active-deployment";
+import { clientsFor } from "@/lib/rpc";
 import { errMsg } from "@/lib/err";
 import { CopyButton } from "../copy-button";
-
-const AUDITOR_SK = fromHex(DEPLOYMENT.auditorSecretHex);
+import { PageShell } from "../page-shell";
+import { ErrorBox } from "../error-box";
+import { Addr } from "../addr";
+import { TxLink } from "../tx-link";
 
 /** One decrypted line of the auditor's ledger. */
 interface AuditRow {
@@ -57,7 +58,10 @@ interface AccountView {
   lastLedger: number;
 }
 
-function replay(events: ConfidentialEvent[]): { rows: AuditRow[]; accounts: AccountView[] } {
+function replay(
+  events: ConfidentialEvent[],
+  auditorSk: bigint,
+): { rows: AuditRow[]; accounts: AccountView[] } {
   const rows: AuditRow[] = [];
   const accounts = new Map<string, AccountView>();
   const acct = (address: string): AccountView => {
@@ -109,7 +113,7 @@ function replay(events: ConfidentialEvent[]): { rows: AuditRow[]; accounts: Acco
       }
       case "withdraw": {
         const a = seen(ev.from, ev.ledger);
-        const { senderBalance } = auditWithdraw(AUDITOR_SK, ev);
+        const { senderBalance } = auditWithdraw(auditorSk, ev);
         a.spendable = senderBalance;
         rows.push({
           ev,
@@ -123,7 +127,7 @@ function replay(events: ConfidentialEvent[]): { rows: AuditRow[]; accounts: Acco
       case "transfer": {
         const from = seen(ev.from, ev.ledger);
         const to = seen(ev.to, ev.ledger);
-        const d = auditTransfer(AUDITOR_SK, ev);
+        const d = auditTransfer(auditorSk, ev);
         if (d.channelsAgree) {
           from.spendable = d.senderBalance;
           to.receiving += d.amount;
@@ -149,33 +153,30 @@ function replay(events: ConfidentialEvent[]): { rows: AuditRow[]; accounts: Acco
 }
 
 export default function AuditorPage() {
+  const { active } = useActiveDeployment();
   const [rows, setRows] = useState<AuditRow[] | null>(null);
   const [accounts, setAccounts] = useState<AccountView[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const kAud = pointCoords(auditorPublicKey(AUDITOR_SK));
-  const hasIndexer = !!DEPLOYMENT.indexerUrl;
+  // The auditor key is constant across deployments (same auditor contract), but
+  // the token whose events we decrypt follows the active deployment.
+  const auditorSk = useMemo(() => fromHex(active.auditorSecretHex), [active.auditorSecretHex]);
+  const kAud = useMemo(() => pointCoords(auditorPublicKey(auditorSk)), [auditorSk]);
+  const hasIndexer = !!active.indexerUrl;
 
   const load = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
-      const client = new ChainClient({
-        rpcUrl: DEPLOYMENT.rpcUrl,
-        networkPassphrase: DEPLOYMENT.networkPassphrase,
-        contracts: DEPLOYMENT.contracts,
-      });
       // Hybrid source: the indexer (when configured) backfills the full history
       // below the RPC's ~7-day window — exactly what an auditor needs. The RPC
       // leg is clamped to the retention boundary internally.
-      const indexer = DEPLOYMENT.indexerUrl
-        ? new IndexerClient({ baseUrl: DEPLOYMENT.indexerUrl })
-        : undefined;
+      const { client, indexer } = clientsFor(active);
       const { events } = await hybridFetchEvents(client, indexer, {
-        fromLedger: DEPLOYMENT.deployedAtLedger,
+        fromLedger: active.deployedAtLedger,
       });
-      const result = replay(events);
+      const result = replay(events, auditorSk);
       setRows(result.rows);
       setAccounts(result.accounts);
     } catch (e) {
@@ -183,27 +184,20 @@ export default function AuditorPage() {
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [active, auditorSk]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">Auditor</h1>
-        <p className="mt-2 text-sm leading-relaxed text-neutral-400">
-          You are the designated auditor for this deployment: every account registers under your
-          auditor id. Amounts that everyone else sees as ciphertext, you read in cleartext: each
-          transfer and withdrawal carries ECDH ciphertexts addressed to your key. No wallet, no 
-          proofs, and no account cooperation required.
-        </p>
-      </header>
-
+    <PageShell
+      title="Auditor"
+      subtitle="You are the designated auditor for this deployment: every account registers under your auditor id. Amounts that everyone else sees as ciphertext, you read in cleartext: each transfer and withdrawal carries ECDH ciphertexts addressed to your key. No wallet, no proofs, and no account cooperation required."
+    >
       <div className="space-y-6">
         <section className="rounded border border-amber-900/70 bg-amber-950/20 p-4">
-          <h3 className="mb-1 font-medium text-amber-300">Your auditor key (id {DEPLOYMENT.auditorId})</h3>
+          <h3 className="mb-1 font-medium text-amber-300">Your auditor key (id {active.auditorId})</h3>
           <p className="mb-3 text-xs text-neutral-400">
             Demo-only: this secret ships with the app so anyone can take the auditor role.
             In a real deployment it lives in the auditor&apos;s vault and only the public key{" "}
@@ -212,8 +206,8 @@ export default function AuditorPage() {
           <dl className="space-y-1 break-all font-mono text-xs text-neutral-300">
             <div>
               <dt className="inline text-neutral-500">secret k: </dt>
-              <dd className="inline">{DEPLOYMENT.auditorSecretHex}</dd>{" "}
-              <CopyButton label="Copy" payload={() => DEPLOYMENT.auditorSecretHex} />
+              <dd className="inline">{active.auditorSecretHex}</dd>{" "}
+              <CopyButton label="Copy" payload={() => active.auditorSecretHex} />
             </div>
             <div>
               <dt className="inline text-neutral-500">K_aud.x: </dt>
@@ -260,7 +254,9 @@ export default function AuditorPage() {
               <tbody className="text-neutral-300">
                 {accounts.map((a) => (
                   <tr key={a.address} className="border-t border-neutral-900">
-                    <td className="py-1.5 font-mono">{shortAddr(a.address)}</td>
+                    <td className="py-1.5">
+                      <Addr value={a.address} />
+                    </td>
                     <td className="py-1.5">{a.spendable === null ? "?" : a.spendable.toString()}</td>
                     <td className="py-1.5">{a.receiving.toString()}</td>
                     <td className="py-1.5 text-neutral-500">ledger {a.lastLedger}</td>
@@ -279,7 +275,9 @@ export default function AuditorPage() {
             cleartext — decrypted with your key alone.
           </p>
           {error && (
-            <div className="mb-3 rounded border border-red-800 bg-red-950/40 p-2 text-xs text-red-300">{error}</div>
+            <ErrorBox size="sm" className="mb-3">
+              {error}
+            </ErrorBox>
           )}
           {!rows && busy && <p className="text-sm text-neutral-500">Syncing events…</p>}
           {rows && rows.length === 0 && (
@@ -294,26 +292,27 @@ export default function AuditorPage() {
           )}
         </section>
       </div>
-
-      <footer className="mt-10 font-mono text-xs text-neutral-600">
-        auditor contract {shortAddr(DEPLOYMENT.contracts.auditor)} · token{" "}
-        {shortAddr(DEPLOYMENT.contracts.token)} · decryption per DESIGN.md §8
-      </footer>
-    </main>
+    </PageShell>
   );
 }
 
 function AuditRowView({ row }: { row: AuditRow }) {
   const { ev } = row;
+  // deposit/withdraw/transfer carry from→to; register/merge (and any compliance
+  // event, though the auditor never emits rows for those) carry a single account.
   const parties =
-    ev.type === "register" || ev.type === "merge"
-      ? shortAddr(ev.account)
-      : `${shortAddr(ev.from)} → ${shortAddr(ev.to)}`;
+    "from" in ev ? (
+      <>
+        <Addr value={ev.from} /> → <Addr value={ev.to} />
+      </>
+    ) : (
+      <Addr value={ev.account} />
+    );
   return (
     <li className="rounded border border-neutral-900 bg-neutral-500/10 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className={`rounded px-2 py-0.5 text-xs font-medium ${badgeCls(ev.type)}`}>{ev.type}</span>
-        <span className="font-mono text-xs text-neutral-400">{parties}</span>
+        <span className="text-xs text-neutral-400">{parties}</span>
         <span className="flex-1" />
         {row.amount !== null && (
           <span className="text-sm font-medium text-amber-300">{row.amount.toString()}</span>
@@ -329,7 +328,7 @@ function AuditRowView({ row }: { row: AuditRow }) {
         )}
       </div>
       <div className="mt-1 text-xs text-neutral-600">
-        ledger {ev.ledger} · tx <span className="font-mono">{ev.txHash.slice(0, 10)}…</span>
+        ledger {ev.ledger} · tx <TxLink hash={ev.txHash} />
       </div>
     </li>
   );
@@ -347,9 +346,7 @@ function badgeCls(type: ConfidentialEvent["type"]): string {
       return "bg-purple-900 text-purple-300";
     case "merge":
       return "bg-neutral-800 text-neutral-300";
+    default:
+      return "bg-neutral-800 text-neutral-300";
   }
-}
-
-function shortAddr(a: string): string {
-  return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }

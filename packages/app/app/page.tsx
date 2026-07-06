@@ -1,11 +1,19 @@
+"use client";
+
 /**
- * Landing page: a persona chooser. The demo is a three-hander — pick a role and
- * land on that persona's page. The same three links live in the top bar of every
- * page (app/nav.tsx).
+ * Landing page: a persona chooser. Pick a role and land on that persona's page.
+ * The same links live in the top bar of every page (app/nav.tsx). The roster
+ * reflects the active deployment — the Token Admin role appears for any
+ * deployment created in advanced mode (compliant or vanilla — its dashboard is
+ * also the redeploy portal), but not for the built-in default. The deployment
+ * axis itself (Default ↔ Advanced, and deploying your own) is managed from the
+ * top bar, not here.
  */
 
 import Link from "next/link";
-import { DEPLOYMENT } from "@/lib/deployment";
+import { useActiveDeployment } from "@/lib/active-deployment";
+import { hasAdminDashboard } from "@/lib/deployment";
+import { ServingBadge } from "./serving-badge";
 
 const PERSONA_CARDS = [
   {
@@ -22,7 +30,7 @@ const PERSONA_CARDS = [
   },
   {
     href: "/verify",
-    title: "Verifier",
+    title: "Disclosure receiver",
     tagline: "verifying counterparty",
     accent: "border-cyan-500/40 hover:border-cyan-400/70",
     cta: "Verify a disclosure →",
@@ -45,7 +53,23 @@ const PERSONA_CARDS = [
   },
 ] as const;
 
+const ADMIN_CARD = {
+  href: "/admin",
+  title: "Token admin",
+  tagline: "deployment owner",
+  accent: "border-rose-500/40 hover:border-rose-400/70",
+  cta: "Open admin dashboard →",
+  ctaCls: "text-rose-300",
+  blurb:
+    "The owner of a compliant token: see every registered account, freeze/unfreeze accounts, and " +
+    "(for allowlist/blocklist configs) manage who is permitted to transact. For a vanilla " +
+    "configuration deployed in advanced mode, this is instead where you redeploy.",
+} as const;
+
 export default function LandingPage() {
+  const { active } = useActiveDeployment();
+  const cards = hasAdminDashboard(active) ? [ADMIN_CARD, ...PERSONA_CARDS] : PERSONA_CARDS;
+
   return (
     <main className="mx-auto max-w-3xl px-5 py-12">
       <header className="mb-10">
@@ -55,10 +79,11 @@ export default function LandingPage() {
           UltraHonk proof. Amounts stay private, disclosed only to the parties entitled to see
           them. Select a role to begin.
         </p>
+        <ServingBadge className="mt-4" />
       </header>
 
       <div className="space-y-4">
-        {PERSONA_CARDS.map((p) => (
+        {cards.map((p) => (
           <Link
             key={p.href}
             href={p.href}
@@ -73,15 +98,6 @@ export default function LandingPage() {
           </Link>
         ))}
       </div>
-
-      <footer className="mt-10 font-mono text-xs text-neutral-600">
-        token {short(DEPLOYMENT.contracts.token)} · verifier {short(DEPLOYMENT.contracts.verifier)} ·
-        auditor {short(DEPLOYMENT.contracts.auditor)} · Stellar testnet · unaudited reference demo
-      </footer>
     </main>
   );
-}
-
-function short(id: string): string {
-  return `${id.slice(0, 4)}…${id.slice(-4)}`;
 }

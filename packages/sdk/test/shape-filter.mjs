@@ -11,6 +11,10 @@
 //   deposit  : symbol = 'deposit' AND topic[2] is an address AND data LIKE '%amount%'
 //   merge    : symbol = 'merge'   AND topic[1] is an address, topic[2] absent,
 //              AND data has no fields (empty Map)
+//   compliance/policy : symbol IN ('frozen','unfrozen','user_allowed',
+//              'user_disallowed','user_blocked','user_unblocked') AND topic[1]
+//              is an address, topic[2] absent, AND data has no fields (same
+//              [symbol, account] empty-Map shape as merge)
 //
 // Every branch identifies the confidential family by a FIELD, not just the
 // symbol — so foreign events that reuse these symbols are excluded: the SAC /
@@ -49,7 +53,17 @@ function check(name, cond, detail) {
   }
 }
 
-const KNOWN = new Set(["register", "deposit", "merge", "transfer", "withdraw"]);
+// Compliance (token_with_compliance) + policy (allowlist/blocklist) membership
+// events: all share the [symbol, account] empty-data shape.
+const COMPLIANCE = new Set([
+  "frozen",
+  "unfrozen",
+  "user_allowed",
+  "user_disallowed",
+  "user_blocked",
+  "user_unblocked",
+]);
+const KNOWN = new Set(["register", "deposit", "merge", "transfer", "withdraw", ...COMPLIANCE]);
 
 const hasKey = (value, name) => (value?.map ?? []).some((e) => e?.key?.symbol === name);
 const isEmptyMap = (value) => Array.isArray(value?.map) && value.map.length === 0;
@@ -72,6 +86,10 @@ function pipelineKeeps(topic, value) {
     case "merge":
       return topicAddr(topic, 1) != null && topicAddr(topic, 2) == null && isEmptyMap(value);
     default:
+      // Compliance/policy events: [symbol, account] with no data fields.
+      if (COMPLIANCE.has(sym)) {
+        return topicAddr(topic, 1) != null && topicAddr(topic, 2) == null && isEmptyMap(value);
+      }
       return false;
   }
 }
@@ -130,6 +148,8 @@ for (const [sym, r] of bySymbol) {
     check(`${sym}: shape [deposit, from, to] + 'amount'`, topicAddr(t, 2) != null && hasKey(v, "amount"), `topics=${JSON.stringify(t)?.slice(0, 160)} keys=${keys()}`);
   } else if (sym === "merge") {
     check(`${sym}: shape [merge, account] + empty data`, topicAddr(t, 1) != null && topicAddr(t, 2) == null && isEmptyMap(v), `topics=${JSON.stringify(t)?.slice(0, 160)} value=${JSON.stringify(v)?.slice(0, 120)}`);
+  } else if (COMPLIANCE.has(sym)) {
+    check(`${sym}: shape [${sym}, account] + empty data`, topicAddr(t, 1) != null && topicAddr(t, 2) == null && isEmptyMap(v), `topics=${JSON.stringify(t)?.slice(0, 160)} value=${JSON.stringify(v)?.slice(0, 120)}`);
   }
 }
 

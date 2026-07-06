@@ -16,8 +16,14 @@
  * belt-and-suspenders guard for the boundary ledger (and because
  * `StateEngine.apply` is not idempotent, a stray duplicate would double-count).
  *
- * The indexer is OPTIONAL: when `indexer` is `undefined` or a call throws, this
- * degrades to today's RPC-only behavior (pre-window history simply unavailable).
+ * The indexer is OPTIONAL: when `indexer` is `undefined`, this degrades to
+ * RPC-only behavior (pre-window history simply unavailable) — a deliberate
+ * configuration choice. But when a *configured* indexer's backfill call
+ * throws (a transient network/Worker hiccup), the error PROPAGATES instead of
+ * degrading silently: StateEngine.sync() would otherwise still complete using
+ * only the RPC leg and persist its cursor, which permanently commits every
+ * future sync to the warm, indexer-skipping path (see below) — turning one
+ * transient failure into unrecoverable data loss for that client.
  */
 
 import {
@@ -76,9 +82,11 @@ async function rpcOldestLedger(client: ChainClient): Promise<number> {
 export async function hybridFetchEvents(
   client: ChainClient,
   indexer: IndexerClient | undefined,
-  opts: { fromLedger: number; startCursor?: string },
+  opts: { fromLedger: number; startCursor?: string; contractId?: string },
 ): Promise<FetchEventsResult> {
-  const tokenId = client.cfg.contracts.token;
+  // Defaults to the token, but the token-admin dashboard passes a policy
+  // (allowlist/blocklist) contract id to read its `user_*` membership events.
+  const tokenId = opts.contractId ?? client.cfg.contracts.token;
   // `next` is the first ledger we still need. Using cursorLedger+1 assumes the
   // previous sync consumed the cursor's ledger in full — true here because
   // fetchEvents pages all the way to the chain head, so a stored cursor only
@@ -101,29 +109,29 @@ export async function hybridFetchEvents(
     // is a clean ledger boundary: indexer owns [next, seam-1], RPC owns
     // [seam, head], disjoint by construction. The stale cursor (if any) is
     // discarded — it points before the window and the RPC would reject it.
+    //
+    // Deliberately NOT try/caught: a failed backfill must fail this whole
+    // sync (see the module doc comment) rather than let the RPC leg's cursor
+    // persist and silently strand pre-window history forever.
     const seam = rpcOldest + RPC_SEAM_MARGIN;
-    try {
-      const res = await indexer.fetchEvents({
-        contractId: tokenId,
-        startLedger: next,
-        endLedger: seam - 1,
-      });
-      old = res.events;
-    } catch (e) {
-      console.warn(
-        `[ctd] indexer backfill failed (${String((e as Error)?.message ?? e)}); ` +
-          `pre-window history before ledger ${seam} is unavailable this sync`,
-      );
-    }
-    recent = await fetchEvents(client, { startLedger: seam });
+    const res = await indexer.fetchEvents({
+      contractId: tokenId,
+      startLedger: next,
+      endLedger: seam - 1,
+    });
+    old = res.events;
+    recent = await fetchEvents(client, { startLedger: seam, contractId: tokenId });
   } else if (opts.startCursor) {
     // Warm path: resume RPC from the stored cursor. Indexer untouched.
-    recent = await fetchEvents(client, { startCursor: opts.startCursor });
+    recent = await fetchEvents(client, { startCursor: opts.startCursor, contractId: tokenId });
   } else {
     // Cold start within (or no) window: RPC only, clamped just inside the
     // retention floor so getEvents can't reject an aged-out startLedger.
     const floor = rpcOldest > 0 ? rpcOldest + 1 : opts.fromLedger;
-    recent = await fetchEvents(client, { startLedger: Math.max(opts.fromLedger, floor) });
+    recent = await fetchEvents(client, {
+      startLedger: Math.max(opts.fromLedger, floor),
+      contractId: tokenId,
+    });
   }
 
   return {

@@ -10,7 +10,7 @@
  */
 
 import {
-  ChainClient,
+  type ChainClient,
   type Signer,
   type OnChainAccount,
   deriveKeys,
@@ -31,7 +31,7 @@ import {
   submitMerge,
   submitWithdraw,
   submitTransfer,
-  IndexerClient,
+  type IndexerClient,
   hybridFetchEvents,
   proveRecipientDisclosure,
   proveSenderDisclosure,
@@ -39,6 +39,9 @@ import {
   scalarMul,
   H,
   pointCoords,
+  ecdh,
+  decryptWithDomain,
+  DOMAIN,
   type ConfidentialEvent,
   type TransferEvent,
   type DisclosureRequest,
@@ -50,10 +53,12 @@ import transferCircuit from "@ctd/sdk/circuits/transfer.json";
 import discloseRecipientCircuit from "@ctd/disclosure/artifacts/disclose_recipient.json";
 import discloseSenderCircuit from "@ctd/disclosure/artifacts/disclose_sender.json";
 
-import { DEPLOYMENT } from "./deployment";
+import type { Deployment } from "./deployment";
 import { connectFreighter } from "./freighter";
 import { keyDerivationMessage, skFromSignature } from "./derive-key";
 import { ensureBrowserBackend } from "./bb-loader";
+import { clientsFor } from "./rpc";
+import { truncatePrefix } from "./format";
 
 type Log = (msg: string) => void;
 type CircuitName = "register" | "withdraw" | "transfer" | "disclose_recipient" | "disclose_sender";
@@ -85,6 +90,7 @@ export class ConfidentialWallet {
 
   private constructor(
     readonly address: string,
+    private deployment: Deployment,
     private signer: Signer,
     private keys: KeyPair,
     private client: ChainClient,
@@ -93,19 +99,19 @@ export class ConfidentialWallet {
     private log: Log,
   ) {}
 
-  static async connect(log: Log): Promise<ConfidentialWallet> {
+  static async connect(deployment: Deployment, log: Log): Promise<ConfidentialWallet> {
     ensureBrowserBackend();
     const signer = await connectFreighter();
     log(`connected ${signer.publicKey}`);
+    log(`deployment: ${deployment.label} (token ${truncatePrefix(deployment.contracts.token, 6)})`);
 
-    const client = new ChainClient({
-      rpcUrl: DEPLOYMENT.rpcUrl,
-      networkPassphrase: DEPLOYMENT.networkPassphrase,
-      contracts: DEPLOYMENT.contracts,
-    });
+    const { client, indexer } = clientsFor(deployment);
 
-    const addrF = addressToField(DEPLOYMENT.contracts.token);
-    const skKey = `ctd:sk:${DEPLOYMENT.contracts.token}:${signer.publicKey}`;
+    // Keys are token-bound (addr_f domain separation), so a different deployment
+    // derives a different key set and caches under a different localStorage key.
+    const tokenId = deployment.contracts.token;
+    const addrF = addressToField(tokenId);
+    const skKey = `ctd:sk:${tokenId}:${signer.publicKey}`;
     let sk: bigint;
     const stored = localStorage.getItem(skKey);
     if (stored) {
@@ -113,7 +119,7 @@ export class ConfidentialWallet {
     } else {
       log("sign the key-derivation message in Freighter…");
       const signature = await signer.signMessage(
-        keyDerivationMessage(DEPLOYMENT.networkPassphrase, DEPLOYMENT.contracts.token),
+        keyDerivationMessage(deployment.networkPassphrase, tokenId),
       );
       sk = await skFromSignature(signature);
       localStorage.setItem(skKey, toHex32(sk));
@@ -124,26 +130,42 @@ export class ConfidentialWallet {
     // Optional Goldsky indexer: when configured, the hybrid event source
     // backfills history older than the RPC's ~7-day window. Without it the app
     // is RPC-only (today's behavior).
-    const indexer = DEPLOYMENT.indexerUrl
-      ? new IndexerClient({ baseUrl: DEPLOYMENT.indexerUrl })
-      : undefined;
-    if (indexer) log(`indexer configured (${DEPLOYMENT.indexerUrl})`);
+    if (indexer) log(`indexer configured (${deployment.indexerUrl})`);
 
-    // Start from the deploy ledger, unclamped: hybridFetchEvents clamps the RPC
-    // leg to the retention window itself and routes anything older to the
-    // indexer (if present), so a stale deployment no longer makes sync throw.
-    const fromLedger: number = DEPLOYMENT.deployedAtLedger;
+    // State store is namespaced by token address so separate deployments using
+    // the same Freighter account don't corrupt each other's balances. The
+    // pre-namespacing default-deployment cache (`ctd:state:<addr>`) is orphaned;
+    // with the indexer available, the first sync rebuilds full history, so we
+    // just clear the legacy key once to avoid clutter.
+    if (deployment.id === "default") {
+      try {
+        localStorage.removeItem(`ctd:state:${signer.publicKey}`);
+      } catch {
+        /* ignore */
+      }
+    }
 
     const engine = new StateEngine({
       client,
-      store: new LocalStorageStore(),
+      store: new LocalStorageStore(`ctd:state:${tokenId}:`),
       keys,
       address: signer.publicKey,
-      fromLedger,
+      // Start from the deploy ledger, unclamped: hybridFetchEvents clamps the
+      // RPC leg to the retention window and routes anything older to the indexer.
+      fromLedger: deployment.deployedAtLedger,
       indexer,
     });
 
-    return new ConfidentialWallet(signer.publicKey, signer, keys, client, engine, indexer, log);
+    return new ConfidentialWallet(
+      signer.publicKey,
+      deployment,
+      signer,
+      keys,
+      client,
+      engine,
+      indexer,
+      log,
+    );
   }
 
   private prover(name: CircuitName): CircuitProver {
@@ -167,27 +189,27 @@ export class ConfidentialWallet {
     const { proof } = await this.prover("register").prove(w.inputs);
     onPhase?.("submitting");
     this.log("submitting register…");
-    const r = await submitRegister(this.client, this.signer, this.address, DEPLOYMENT.auditorId, w, proof);
-    this.log(`registered (tx ${r.hash.slice(0, 10)}…)`);
+    const r = await submitRegister(this.client, this.signer, this.address, this.deployment.auditorId, w, proof);
+    this.log(`registered (tx ${truncatePrefix(r.hash)})`);
   }
 
   async deposit(amount: bigint): Promise<void> {
     this.log(`depositing ${amount}…`);
     const r = await submitDeposit(this.client, this.signer, this.address, this.address, amount);
-    this.log(`deposited (tx ${r.hash.slice(0, 10)}…) → receiving balance`);
+    this.log(`deposited (tx ${truncatePrefix(r.hash)}) → receiving balance`);
   }
 
   async merge(): Promise<void> {
     this.log("merging receiving → spendable…");
     const r = await submitMerge(this.client, this.signer, this.address);
-    this.log(`merged (tx ${r.hash.slice(0, 10)}…)`);
+    this.log(`merged (tx ${truncatePrefix(r.hash)})`);
   }
 
   async transfer(to: string, amount: bigint, onPhase?: (p: TxPhase) => void): Promise<void> {
     const recipient = await this.client.confidentialBalance(to);
     if (!recipient) throw new Error("recipient is not registered");
     const kAudR = await this.client.auditorKey(recipient.auditorId);
-    const kAudS = await this.client.auditorKey(DEPLOYMENT.auditorId);
+    const kAudS = await this.client.auditorKey(this.deployment.auditorId);
 
     const s = await this.engine.sync();
     if (s.spendable.v < amount) throw new Error(`insufficient spendable balance (${s.spendable.v})`);
@@ -210,11 +232,11 @@ export class ConfidentialWallet {
     await this.engine.setSpendable(w.next);
     // No r_e bookkeeping (§15.2): the witness derives it from (vk, sigma), so
     // discloseSent() re-derives it from the emitted event whenever needed.
-    this.log(`transferred ${amount} → ${to.slice(0, 6)}… (tx ${r.hash.slice(0, 10)}…)`);
+    this.log(`transferred ${amount} → ${truncatePrefix(to, 6)} (tx ${truncatePrefix(r.hash)})`);
   }
 
   async withdraw(amount: bigint, onPhase?: (p: TxPhase) => void): Promise<void> {
-    const kAudS = await this.client.auditorKey(DEPLOYMENT.auditorId);
+    const kAudS = await this.client.auditorKey(this.deployment.auditorId);
     const s = await this.engine.sync();
     if (s.spendable.v < amount) throw new Error(`insufficient spendable balance (${s.spendable.v})`);
 
@@ -226,7 +248,7 @@ export class ConfidentialWallet {
     this.log("submitting withdraw…");
     const r = await submitWithdraw(this.client, this.signer, this.address, this.address, amount, w, proof);
     await this.engine.setSpendable(w.next);
-    this.log(`withdrew ${amount} → public (tx ${r.hash.slice(0, 10)}…)`);
+    this.log(`withdrew ${amount} → public (tx ${truncatePrefix(r.hash)})`);
   }
 
   /**
@@ -267,7 +289,7 @@ export class ConfidentialWallet {
   private async fetchAllEvents(): Promise<ConfidentialEvent[]> {
     if (this.inFlightEvents) return this.inFlightEvents;
     const fetch = hybridFetchEvents(this.client, this.indexer, {
-      fromLedger: DEPLOYMENT.deployedAtLedger,
+      fromLedger: this.deployment.deployedAtLedger,
     }).then((r) => r.events);
     this.inFlightEvents = fetch;
     try {
@@ -286,6 +308,10 @@ export class ConfidentialWallet {
       case "withdraw":
       case "transfer":
         return ev.from === this.address || ev.to === this.address;
+      default:
+        // Compliance/policy membership events are surfaced in the admin
+        // dashboard, not the wallet activity list.
+        return false;
     }
   }
 
@@ -312,6 +338,36 @@ export class ConfidentialWallet {
   }
 
   /**
+   * Decrypt a confidential transfer's amount for local display, from whichever
+   * side this wallet is on:
+   *   - inbound (to === me):  ECDH with this wallet's viewing key.
+   *   - outbound (from === me): re-derive the ephemeral scalar (§15.2) and ECDH
+   *     against the recipient's stored viewing key — the same recovery as
+   *     discloseSent, minus the proof.
+   * Returns null when the amount can't be recovered here: an outbound transfer
+   * not built with these keys (non-deterministic r_e), or a recipient with no
+   * on-chain account record. The amount stays confidential on-chain regardless.
+   */
+  async transferAmount(event: TransferEvent): Promise<bigint | null> {
+    // Inbound path also covers a self-transfer (to === from === me).
+    if (event.to === this.address) {
+      return this.engine.decryptIncoming(event.rE, event.vTilde, event.sigma).vTx;
+    }
+    if (event.from === this.address) {
+      const rEScalar = this.recoverRE(event);
+      if (rEScalar === null) return null;
+      const recipient = await this.client.confidentialBalance(event.to);
+      if (!recipient) return null;
+      const sBx = ecdh(rEScalar, recipient.viewingPublicKey);
+      const vTx = decryptWithDomain(event.vTilde, DOMAIN.TX_AMOUNT, sBx, event.sigma);
+      // A wrong key yields garbage far outside the 127-bit amount range.
+      if (vTx >= 1n << 127n) return null;
+      return vTx;
+    }
+    return null;
+  }
+
+  /**
    * Produce a D-recipient disclosure bundle for an inbound transfer event,
    * answering a third party's `(P_R, ν)` request. Runs the disclosure circuit
    * in-browser; only works for events whose `to` is this wallet.
@@ -327,7 +383,7 @@ export class ConfidentialWallet {
       request,
       prover: this.prover("disclose_recipient"),
     });
-    this.log(`disclosure proof ready for event in tx ${event.txHash.slice(0, 10)}…`);
+    this.log(`disclosure proof ready for event in tx ${truncatePrefix(event.txHash)}`);
     return bundle;
   }
 
@@ -357,8 +413,14 @@ export class ConfidentialWallet {
       request,
       prover: this.prover("disclose_sender"),
     });
-    this.log(`disclosure proof ready for event in tx ${event.txHash.slice(0, 10)}…`);
+    this.log(`disclosure proof ready for event in tx ${truncatePrefix(event.txHash)}`);
     return bundle;
+  }
+
+  /** Free every cached bb.js prover (worker + WASM) before discarding this wallet. */
+  async destroy(): Promise<void> {
+    await Promise.all([...this.provers.values()].map((p) => p.destroy()));
+    this.provers.clear();
   }
 
   /** Sync from RPC events, verify against chain, and return a UI view. */

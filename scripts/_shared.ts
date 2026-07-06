@@ -17,8 +17,12 @@ export const FRIENDBOT = "https://friendbot.stellar.org";
 
 export const WASM = {
   token: join(REPO_ROOT, "packages/sdk/contracts/confidential_token.wasm"),
+  tokenWithCompliance: join(REPO_ROOT, "packages/sdk/contracts/token_with_compliance.wasm"),
   verifier: join(REPO_ROOT, "packages/sdk/contracts/confidential_verifier.wasm"),
   auditor: join(REPO_ROOT, "packages/sdk/contracts/confidential_auditor.wasm"),
+  allowlist: join(REPO_ROOT, "packages/sdk/contracts/allowlist.wasm"),
+  blocklist: join(REPO_ROOT, "packages/sdk/contracts/blocklist.wasm"),
+  factory: join(REPO_ROOT, "packages/sdk/contracts/token_factory.wasm"),
 };
 
 export const VKS_DIR = join(REPO_ROOT, "packages/sdk/circuits/vks");
@@ -29,7 +33,20 @@ export interface Deployment {
   rpcUrl: string;
   passphrase: string;
   deployedAtLedger: number;
-  contracts: { token: string; verifier: string; auditor: string; underlying: string };
+  contracts: {
+    token: string;
+    verifier: string;
+    auditor: string;
+    underlying: string;
+    // Standalone ownable compliance policies (owner = deployer). Optional so
+    // deployments predating these contracts still parse.
+    allowlist?: string;
+    blocklist?: string;
+    // Shared token factory for advanced mode, configured at construction with
+    // the child WASM hashes. The app invokes factory.deploy_* to create a
+    // user-configured confidential token. Optional so older deployments parse.
+    factory?: string;
+  };
   auditor: { id: number; secretHex: string; keyXHex: string; keyYHex: string };
   addrF: string;
 }

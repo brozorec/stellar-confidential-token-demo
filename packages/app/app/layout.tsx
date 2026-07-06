@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { PersonaNav } from "./nav";
+import { ActiveDeploymentProvider } from "@/lib/active-deployment";
 
 export const metadata: Metadata = {
   title: "Stellar Confidential Token",
@@ -17,8 +18,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen font-sans">
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
-        <PersonaNav />
-        {children}
+        <ActiveDeploymentProvider>
+          <PersonaNav />
+          {children}
+        </ActiveDeploymentProvider>
       </body>
     </html>
   );

@@ -4,3 +4,6 @@ export * from "./contract.js";
 export * from "./events.js";
 export * from "./indexer.js";
 export * from "./event-source.js";
+export * from "./factory.js";
+export * from "./admin.js";
+export * from "./errors.js";

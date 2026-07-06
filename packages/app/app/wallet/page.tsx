@@ -1,10 +1,15 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ConfidentialWallet, type WalletView, type TxPhase } from "@/lib/wallet";
-import { DEPLOYMENT } from "@/lib/deployment";
+import { useActiveDeployment } from "@/lib/active-deployment";
 import { errMsg } from "@/lib/err";
+import { useLog } from "@/lib/use-log";
 import { EventsPanel } from "./events-panel";
+import { PageShell } from "../page-shell";
+import { ErrorBox } from "../error-box";
+import { LogPanel } from "../log-panel";
+import { Addr } from "../addr";
 
 type ActionTab = "deposit" | "withdraw" | "transfer" | "merge";
 
@@ -49,9 +54,10 @@ const ACTIONS: Record<
 };
 
 export default function Page() {
+  const { active } = useActiveDeployment();
   const [wallet, setWallet] = useState<ConfidentialWallet | null>(null);
   const [view, setView] = useState<WalletView | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
+  const [logs, log] = useLog(60);
   const [busy, setBusy] = useState<string | null>(null);
   const [phase, setPhase] = useState<TxPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,10 +70,6 @@ export default function Page() {
   const [transferTo, setTransferTo] = useState("");
   const [transferAmt, setTransferAmt] = useState("400");
   const [withdrawAmt, setWithdrawAmt] = useState("400");
-
-  const log = useCallback((msg: string) => {
-    setLogs((prev) => [`${new Date().toLocaleTimeString()}  ${msg}`, ...prev].slice(0, 60));
-  }, []);
 
   const loadRecipients = useCallback(
     async (w: ConfidentialWallet) => {
@@ -85,7 +87,7 @@ export default function Page() {
     setError(null);
     setBusy("connecting");
     try {
-      const w = await ConfidentialWallet.connect(log);
+      const w = await ConfidentialWallet.connect(active, log);
       setWallet(w);
       const v = await w.refresh();
       setView(v);
@@ -96,7 +98,22 @@ export default function Page() {
     } finally {
       setBusy(null);
     }
-  }, [log, loadRecipients]);
+  }, [active, log, loadRecipients]);
+
+  // Switching deployment invalidates the connected wallet (different token →
+  // different keys, balances, and event history). Reset so the user reconnects
+  // against the newly-active deployment, freeing the old wallet's cached bb.js
+  // provers (workers/WASM) first.
+  useEffect(() => {
+    setWallet((prev) => {
+      void prev?.destroy();
+      return null;
+    });
+    setView(null);
+    setRecipients(null);
+    setMergeNotice(null);
+    setError(null);
+  }, [active.contracts.token]);
 
   const run = useCallback(
     (label: string, fn: (w: ConfidentialWallet) => Promise<void>) => async () => {
@@ -129,21 +146,11 @@ export default function Page() {
     : ["deposit", "withdraw", "transfer"];
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Account holder <span className="text-base font-normal text-neutral-500">· wallet</span>
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-neutral-400">
-          Hold tokens and move them without revealing amounts on-chain: deposit, merge, transfer,
-          and withdraw, each as a client-side zero-knowledge proof. To prove what a single transfer
-          paid, disclose it from the activity list below.
-        </p>
-      </header>
-
-      {error && (
-        <div className="mb-6 rounded border border-red-800 bg-red-950/40 p-3 text-sm text-red-300">{error}</div>
-      )}
+    <PageShell
+      title="Account holder"
+      subtitle="Hold tokens and move them without revealing amounts on-chain: deposit, merge, transfer, and withdraw, each as a client-side zero-knowledge proof. To prove what a single transfer paid, disclose it from the activity list below."
+    >
+      {error && <ErrorBox className="mb-6">{error}</ErrorBox>}
 
       {!wallet ? (
         <button
@@ -306,7 +313,7 @@ export default function Page() {
           >
             {busy === "refresh"
               ? "Syncing…"
-              : DEPLOYMENT.indexerUrl
+              : active.indexerUrl
                 ? "Sync events (RPC + indexer)"
                 : "Sync from RPC events"}
           </button>
@@ -314,12 +321,7 @@ export default function Page() {
       )}
 
       <LogPanel logs={logs} />
-
-      <footer className="mt-10 font-mono text-xs text-neutral-600">
-        token {short(DEPLOYMENT.contracts.token)} · verifier {short(DEPLOYMENT.contracts.verifier)} · auditor{" "}
-        {short(DEPLOYMENT.contracts.auditor)} · events {DEPLOYMENT.indexerUrl ? "RPC + indexer" : "RPC only"}
-      </footer>
-    </main>
+    </PageShell>
   );
 }
 
@@ -382,7 +384,7 @@ function Balances({ view }: { view: WalletView | null }) {
   return (
     <section className="rounded border border-neutral-800 p-4">
       <div className="mb-3 flex items-center justify-between">
-        <span className="font-mono text-sm text-neutral-400">{view.address}</span>
+        <Addr value={view.address} full className="text-sm text-neutral-400" />
         {view.matchesChain !== null && (
           <span
             className={`rounded px-2 py-0.5 text-xs ${
@@ -414,15 +416,3 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function LogPanel({ logs }: { logs: string[] }) {
-  if (logs.length === 0) return null;
-  return (
-    <pre className="mt-6 max-h-56 overflow-auto rounded border border-neutral-900 bg-neutral-500/10 p-3 text-xs text-neutral-400">
-      {logs.join("\n")}
-    </pre>
-  );
-}
-
-function short(id: string): string {
-  return `${id.slice(0, 4)}…${id.slice(-4)}`;
-}
