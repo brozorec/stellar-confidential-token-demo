@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ConfidentialWallet, type WalletView, type TxPhase } from "@/lib/wallet";
 import { useActiveDeployment } from "@/lib/active-deployment";
 import { errMsg } from "@/lib/err";
+import { stroopsToXlm, xlmToStroops } from "@/lib/format";
 import { useLog } from "@/lib/use-log";
 import { EventsPanel } from "./events-panel";
 import { PageShell } from "../page-shell";
@@ -22,7 +23,7 @@ const ACTIONS: Record<
   deposit: {
     icon: "↓",
     title: "Deposit",
-    hint: "Public XLM (stroops) → your receiving balance.",
+    hint: "Public XLM → your receiving balance.",
     card: "border-sky-500/60 bg-sky-500/15 text-sky-300",
     panel: "border-sky-500/30 bg-sky-500/5",
     btn: "bg-sky-600 hover:bg-sky-500",
@@ -66,10 +67,10 @@ export default function Page() {
   const [mergeNotice, setMergeNotice] = useState<"incoming" | "deposit" | null>(null);
   const [eventsKey, setEventsKey] = useState(0);
 
-  const [depositAmt, setDepositAmt] = useState("1000");
+  const [depositAmt, setDepositAmt] = useState("100");
   const [transferTo, setTransferTo] = useState("");
-  const [transferAmt, setTransferAmt] = useState("400");
-  const [withdrawAmt, setWithdrawAmt] = useState("400");
+  const [transferAmt, setTransferAmt] = useState("40");
+  const [withdrawAmt, setWithdrawAmt] = useState("40");
 
   const loadRecipients = useCallback(
     async (w: ConfidentialWallet) => {
@@ -168,8 +169,8 @@ export default function Page() {
             <div className="flex items-center justify-between gap-3 rounded border border-amber-700 bg-amber-950/40 p-3 text-sm text-amber-300">
               <span>
                 {mergeNotice === "deposit"
-                  ? `Deposit landed in your receiving balance (${view.receiving.toString()}). Merge it before you can transfer or withdraw.`
-                  : `You have an incoming balance of ${view.receiving.toString()}. Merge it to make it spendable.`}
+                  ? `Deposit landed in your receiving balance (${stroopsToXlm(view.receiving)} XLM). Merge it before you can transfer or withdraw.`
+                  : `You have an incoming balance of ${stroopsToXlm(view.receiving)} XLM. Merge it to make it spendable.`}
               </span>
               <div className="flex shrink-0 gap-2">
                 <button
@@ -223,7 +224,7 @@ export default function Page() {
                     {ACTIONS[t].title}
                     {t === "merge" && (
                       <span className="absolute right-1.5 top-1.5 rounded-full bg-emerald-500/20 px-1.5 text-[10px] leading-4 text-emerald-300">
-                        {view.receiving.toString()}
+                        {stroopsToXlm(view.receiving)}
                       </span>
                     )}
                   </button>
@@ -233,13 +234,9 @@ export default function Page() {
               <div className="p-4">
                 {activeTab === "deposit" && (
                   <ActionPanel action="deposit">
-                    <input
-                      className={`${inputCls} sm:w-36`}
-                      value={depositAmt}
-                      onChange={(e) => setDepositAmt(e.target.value)}
-                    />
+                    <AmountInput value={depositAmt} onChange={setDepositAmt} className="sm:w-36" />
                     <button
-                      onClick={run("deposit", (w) => w.deposit(BigInt(depositAmt)))}
+                      onClick={run("deposit", (w) => w.deposit(xlmToStroops(depositAmt)))}
                       disabled={busy !== null}
                       className={`${btnCls} ${ACTIONS.deposit.btn}`}
                     >
@@ -250,13 +247,9 @@ export default function Page() {
 
                 {activeTab === "withdraw" && (
                   <ActionPanel action="withdraw">
-                    <input
-                      className={`${inputCls} sm:w-36`}
-                      value={withdrawAmt}
-                      onChange={(e) => setWithdrawAmt(e.target.value)}
-                    />
+                    <AmountInput value={withdrawAmt} onChange={setWithdrawAmt} className="sm:w-36" />
                     <button
-                      onClick={run("withdraw", (w) => w.withdraw(BigInt(withdrawAmt), setPhase))}
+                      onClick={run("withdraw", (w) => w.withdraw(xlmToStroops(withdrawAmt), setPhase))}
                       disabled={busy !== null}
                       className={`${btnCls} ${ACTIONS.withdraw.btn}`}
                     >
@@ -272,13 +265,9 @@ export default function Page() {
                       value={transferTo}
                       onChange={setTransferTo}
                     />
-                    <input
-                      className={`${inputCls} sm:w-28`}
-                      value={transferAmt}
-                      onChange={(e) => setTransferAmt(e.target.value)}
-                    />
+                    <AmountInput value={transferAmt} onChange={setTransferAmt} className="sm:w-28" />
                     <button
-                      onClick={run("transfer", (w) => w.transfer(transferTo, BigInt(transferAmt), setPhase))}
+                      onClick={run("transfer", (w) => w.transfer(transferTo, xlmToStroops(transferAmt), setPhase))}
                       disabled={busy !== null || !transferTo}
                       className={`${btnCls} ${ACTIONS.transfer.btn}`}
                     >
@@ -294,7 +283,7 @@ export default function Page() {
                       disabled={busy !== null}
                       className={`${btnCls} ${ACTIONS.merge.btn}`}
                     >
-                      {busy === "merge" ? "Submitting tx…" : `Merge ${view.receiving.toString()}`}
+                      {busy === "merge" ? "Submitting tx…" : `Merge ${stroopsToXlm(view.receiving)} XLM`}
                     </button>
                   </ActionPanel>
                 )}
@@ -397,8 +386,8 @@ function Balances({ view }: { view: WalletView | null }) {
         )}
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <Stat label="Spendable" value={view.spendable.toString()} />
-        <Stat label="Receiving" value={view.receiving.toString()} />
+        <Stat label="Spendable" value={stroopsToXlm(view.spendable)} />
+        <Stat label="Receiving" value={stroopsToXlm(view.receiving)} />
       </div>
       <p className="mt-3 text-xs text-neutral-500">
         {view.registered ? `synced through ledger ${view.syncedLedger}` : "not registered yet"}
@@ -411,7 +400,34 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="text-xs uppercase tracking-wide text-neutral-500">{label}</div>
-      <div className="text-2xl">{value}</div>
+      <div className="text-2xl">
+        {value} <span className="text-sm text-neutral-500">XLM</span>
+      </div>
+    </div>
+  );
+}
+
+/** XLM amount field: a numeric text input with a trailing "XLM" unit chip. */
+function AmountInput({
+  value,
+  onChange,
+  className = "",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+}) {
+  return (
+    <div className={`relative ${className}`}>
+      <input
+        className={`${inputCls} w-full pr-12`}
+        value={value}
+        inputMode="decimal"
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-neutral-500">
+        XLM
+      </span>
     </div>
   );
 }

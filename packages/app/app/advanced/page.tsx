@@ -246,7 +246,9 @@ export default function AdvancedPage() {
                   established trustline before they can deposit.
                 </li>
                 <li>
-                  Amounts everywhere are in the asset&apos;s smallest unit (e.g. stroops for XLM).
+                  The wallet UI enters and shows amounts in whole XLM and scales by 10<sup>7</sup>
+                  (stroops) on-chain. A custom underlying whose precision is not 7 decimals will be
+                  mis-scaled by this demo.
                 </li>
               </ul>
             </div>

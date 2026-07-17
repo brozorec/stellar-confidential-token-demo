@@ -16,6 +16,7 @@ import type { ConfidentialEvent, TransferEvent, DisclosureRequest } from "@ctd/s
 import type { ConfidentialWallet } from "@/lib/wallet";
 import { useActiveDeployment } from "@/lib/active-deployment";
 import { errMsg } from "@/lib/err";
+import { stroopsToXlm } from "@/lib/format";
 import { CopyButton } from "../copy-button";
 import { ErrorBox } from "../error-box";
 import { Addr } from "../addr";
@@ -255,7 +256,11 @@ const Muted = ({ children }: { children: React.ReactNode }) => (
 function TransferAmount({ amt }: { amt: { loading: boolean; value: bigint | null } }) {
   if (amt.loading) return <Muted>decrypting…</Muted>;
   if (amt.value === null) return <Muted>amount confidential</Muted>;
-  return <Amt title="Decrypted with your key — still confidential on-chain">{amt.value.toString()}</Amt>;
+  return (
+    <Amt title="Decrypted with your key — still confidential on-chain">
+      {stroopsToXlm(amt.value)} XLM
+    </Amt>
+  );
 }
 
 function summary(
@@ -274,7 +279,7 @@ function summary(
     case "deposit":
       return (
         <>
-          <Amt>{ev.amount}</Amt> <Muted>(public)</Muted>
+          <Amt>{stroopsToXlm(ev.amount)} XLM</Amt> <Muted>(public)</Muted>
         </>
       );
     case "merge":
@@ -284,7 +289,7 @@ function summary(
     case "withdraw":
       return (
         <>
-          <Amt>{ev.amount}</Amt> <Muted>(public)</Muted>
+          <Amt>{stroopsToXlm(ev.amount)} XLM</Amt> <Muted>(public)</Muted>
         </>
       );
     case "transfer": {

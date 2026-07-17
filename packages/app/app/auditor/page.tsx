@@ -30,6 +30,7 @@ import {
 import { useActiveDeployment } from "@/lib/active-deployment";
 import { clientsFor } from "@/lib/rpc";
 import { errMsg } from "@/lib/err";
+import { stroopsToXlm } from "@/lib/format";
 import { CopyButton } from "../copy-button";
 import { PageShell } from "../page-shell";
 import { ErrorBox } from "../error-box";
@@ -257,8 +258,8 @@ export default function AuditorPage() {
                     <td className="py-1.5">
                       <Addr value={a.address} />
                     </td>
-                    <td className="py-1.5">{a.spendable === null ? "?" : a.spendable.toString()}</td>
-                    <td className="py-1.5">{a.receiving.toString()}</td>
+                    <td className="py-1.5">{a.spendable === null ? "?" : `${stroopsToXlm(a.spendable)} XLM`}</td>
+                    <td className="py-1.5">{stroopsToXlm(a.receiving)} XLM</td>
                     <td className="py-1.5 text-neutral-500">ledger {a.lastLedger}</td>
                   </tr>
                 ))}
@@ -315,7 +316,7 @@ function AuditRowView({ row }: { row: AuditRow }) {
         <span className="text-xs text-neutral-400">{parties}</span>
         <span className="flex-1" />
         {row.amount !== null && (
-          <span className="text-sm font-medium text-amber-300">{row.amount.toString()}</span>
+          <span className="text-sm font-medium text-amber-300">{stroopsToXlm(row.amount)} XLM</span>
         )}
         {!row.channelsAgree && (
           <span className="rounded bg-red-900 px-2 py-0.5 text-xs text-red-300">undecryptable</span>
@@ -324,7 +325,7 @@ function AuditRowView({ row }: { row: AuditRow }) {
       <div className="mt-1.5 text-xs text-neutral-400">
         {row.text}
         {row.senderBalance !== null && (
-          <> · sender&apos;s balance now <span className="text-neutral-300">{row.senderBalance.toString()}</span></>
+          <> · sender&apos;s balance now <span className="text-neutral-300">{stroopsToXlm(row.senderBalance)} XLM</span></>
         )}
       </div>
       <div className="mt-1 text-xs text-neutral-600">

@@ -58,7 +58,7 @@ import { connectFreighter } from "./freighter";
 import { keyDerivationMessage, skFromSignature } from "./derive-key";
 import { ensureBrowserBackend } from "./bb-loader";
 import { clientsFor } from "./rpc";
-import { truncatePrefix } from "./format";
+import { stroopsToXlm, truncatePrefix } from "./format";
 
 type Log = (msg: string) => void;
 type CircuitName = "register" | "withdraw" | "transfer" | "disclose_recipient" | "disclose_sender";
@@ -194,7 +194,7 @@ export class ConfidentialWallet {
   }
 
   async deposit(amount: bigint): Promise<void> {
-    this.log(`depositing ${amount}…`);
+    this.log(`depositing ${stroopsToXlm(amount)} XLM…`);
     const r = await submitDeposit(this.client, this.signer, this.address, this.address, amount);
     this.log(`deposited (tx ${truncatePrefix(r.hash)}) → receiving balance`);
   }
@@ -212,7 +212,7 @@ export class ConfidentialWallet {
     const kAudS = await this.client.auditorKey(this.deployment.auditorId);
 
     const s = await this.engine.sync();
-    if (s.spendable.v < amount) throw new Error(`insufficient spendable balance (${s.spendable.v})`);
+    if (s.spendable.v < amount) throw new Error(`insufficient spendable balance (${stroopsToXlm(s.spendable.v)} XLM)`);
 
     const w = buildTransferWitness({
       keys: this.keys,
@@ -232,13 +232,13 @@ export class ConfidentialWallet {
     await this.engine.setSpendable(w.next);
     // No r_e bookkeeping (§15.2): the witness derives it from (vk, sigma), so
     // discloseSent() re-derives it from the emitted event whenever needed.
-    this.log(`transferred ${amount} → ${truncatePrefix(to, 6)} (tx ${truncatePrefix(r.hash)})`);
+    this.log(`transferred ${stroopsToXlm(amount)} XLM → ${truncatePrefix(to, 6)} (tx ${truncatePrefix(r.hash)})`);
   }
 
   async withdraw(amount: bigint, onPhase?: (p: TxPhase) => void): Promise<void> {
     const kAudS = await this.client.auditorKey(this.deployment.auditorId);
     const s = await this.engine.sync();
-    if (s.spendable.v < amount) throw new Error(`insufficient spendable balance (${s.spendable.v})`);
+    if (s.spendable.v < amount) throw new Error(`insufficient spendable balance (${stroopsToXlm(s.spendable.v)} XLM)`);
 
     const w = buildWithdrawWitness({ keys: this.keys, v: s.spendable.v, r: s.spendable.r, amount, kAudS });
     onPhase?.("proving");
@@ -248,7 +248,7 @@ export class ConfidentialWallet {
     this.log("submitting withdraw…");
     const r = await submitWithdraw(this.client, this.signer, this.address, this.address, amount, w, proof);
     await this.engine.setSpendable(w.next);
-    this.log(`withdrew ${amount} → public (tx ${truncatePrefix(r.hash)})`);
+    this.log(`withdrew ${stroopsToXlm(amount)} XLM → public (tx ${truncatePrefix(r.hash)})`);
   }
 
   /**

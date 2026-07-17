@@ -41,6 +41,7 @@ import { useActiveDeployment } from "@/lib/active-deployment";
 import { ensureBrowserBackend } from "@/lib/bb-loader";
 import { clientsFor } from "@/lib/rpc";
 import { errMsg } from "@/lib/err";
+import { stroopsToXlm } from "@/lib/format";
 import { CopyButton } from "../copy-button";
 import { PageShell } from "../page-shell";
 import { Addr } from "../addr";
@@ -221,7 +222,7 @@ export default function VerifyPage() {
         {result && (
           <section className="rounded border border-emerald-800 bg-emerald-950/30 p-4">
             <h3 className="mb-2 font-medium text-emerald-300">Disclosure verified ✓</h3>
-            <div className="mb-3 text-3xl">{result.amount.toString()} stroops</div>
+            <div className="mb-3 text-3xl">{stroopsToXlm(result.amount)} XLM</div>
             <p className="mb-3 text-sm text-neutral-300">
               {result.role === "recipient" ? (
                 <>
