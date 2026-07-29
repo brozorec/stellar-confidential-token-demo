@@ -55,7 +55,7 @@ const ACTIONS: Record<
 };
 
 export default function Page() {
-  const { active } = useActiveDeployment();
+  const { active, which, staleSweep, dismissStaleSweep } = useActiveDeployment();
   const [wallet, setWallet] = useState<ConfidentialWallet | null>(null);
   const [view, setView] = useState<WalletView | null>(null);
   const [logs, log] = useLog(60);
@@ -152,6 +152,32 @@ export default function Page() {
       subtitle="Hold tokens and move them without revealing amounts on-chain: deposit, merge, transfer, and withdraw, each as a client-side zero-knowledge proof. To prove what a single transfer paid, disclose it from the activity list below."
     >
       {error && <ErrorBox className="mb-6">{error}</ErrorBox>}
+
+      {/* Only in easy mode: in advanced mode the user is not on the default
+          token, so a default redeploy is not what reset their view. */}
+      {which === "default" && staleSweep && (
+        <div className="mb-6 flex items-start justify-between gap-3 rounded border border-sky-700 bg-sky-950/40 p-3 text-sm text-sky-200">
+          <div>
+            <p className="font-medium">
+              {staleSweep.reason === "redeployed"
+                ? "A new default confidential token has been deployed."
+                : "Cleared cached keys from a token this demo no longer serves."}
+            </p>
+            <p className="mt-1 text-sky-300/90">
+              Confidential keys are bound to the token contract, so nothing carries over from the
+              previous one — your cached keys and balances for it have been cleared. Connect and
+              register again to start from a blank account.
+            </p>
+          </div>
+          <button
+            onClick={dismissStaleSweep}
+            className="shrink-0 rounded px-2 py-1 text-sky-400 hover:text-sky-200"
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {!wallet ? (
         <button

@@ -18,6 +18,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { DEFAULT_DEPLOYMENT, type Deployment } from "./deployment";
+import { sweepStaleDefaultKeys, type StaleSweep } from "./stale-keys";
 
 const ADVANCED_KEY = "ctd:advanced:deployment";
 const ACTIVE_KEY = "ctd:active"; // "default" | "advanced"
@@ -36,6 +37,14 @@ interface ActiveDeploymentCtx {
   saveAdvanced: (d: Deployment) => void;
   /** Forget the advanced deployment and fall back to the default. */
   clearAdvanced: () => void;
+  /**
+   * Set once per load when the default token turned out to have been redeployed
+   * and this browser's cached keys for the old one were evicted. The wallet page
+   * surfaces it so a wiped balance is explained rather than mysterious.
+   */
+  staleSweep: StaleSweep | null;
+  /** Dismiss the redeploy notice for this session. */
+  dismissStaleSweep: () => void;
 }
 
 const Ctx = createContext<ActiveDeploymentCtx | null>(null);
@@ -54,12 +63,24 @@ function loadAdvanced(): Deployment | null {
 export function ActiveDeploymentProvider({ children }: { children: React.ReactNode }) {
   const [advanced, setAdvanced] = useState<Deployment | null>(null);
   const [which, setWhichState] = useState<Which>("default");
+  const [staleSweep, setStaleSweep] = useState<StaleSweep | null>(null);
 
   useEffect(() => {
     const adv = loadAdvanced();
     if (adv) setAdvanced(adv);
     if (localStorage.getItem(ACTIVE_KEY) === "advanced" && adv) setWhichState("advanced");
+    // Runs after the advanced slot is known so a live advanced token is spared.
+    // The sweep is a one-shot: it updates the marker, so a repeat call reports
+    // nothing. Only a positive result is recorded, or React's double-invoked
+    // effects in dev (reactStrictMode) would immediately clear the notice.
+    const sweep = sweepStaleDefaultKeys(
+      DEFAULT_DEPLOYMENT.contracts.token,
+      adv?.contracts.token ?? null,
+    );
+    if (sweep) setStaleSweep(sweep);
   }, []);
+
+  const dismissStaleSweep = useCallback(() => setStaleSweep(null), []);
 
   const setWhich = useCallback((w: Which) => {
     setWhichState(w);
@@ -95,7 +116,18 @@ export function ActiveDeploymentProvider({ children }: { children: React.ReactNo
   const active = which === "advanced" && advanced ? advanced : DEFAULT_DEPLOYMENT;
 
   return (
-    <Ctx.Provider value={{ active, advanced, which, setWhich, saveAdvanced, clearAdvanced }}>
+    <Ctx.Provider
+      value={{
+        active,
+        advanced,
+        which,
+        setWhich,
+        saveAdvanced,
+        clearAdvanced,
+        staleSweep,
+        dismissStaleSweep,
+      }}
+    >
       {children}
     </Ctx.Provider>
   );
