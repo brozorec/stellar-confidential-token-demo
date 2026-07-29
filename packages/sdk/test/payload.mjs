@@ -20,12 +20,13 @@ const ok = (c, m) => (c ? (pass++, console.log("  ✓ " + m)) : (fail++, console
 
 const addrF = addressToField("CCREDIB3DG3IBVUKBL7QMEK4MTPSTODR7MQ34QY4SQ5LZ5L4WFWNVNXG");
 const keys = deriveKeys(randomScalar(), addrF);
+const ACCOUNT = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
 
 // Fake proof bytes (encoding is independent of proof validity).
 const proof = new Uint8Array(14592).fill(7);
 
 console.log("register envelope:");
-const w = buildRegisterWitness(keys);
+const w = buildRegisterWitness(keys, ACCOUNT);
 const dataArg = encodeRegisterData(w, proof);
 
 ok(dataArg.switch().name === "scvBytes", "data arg is scvBytes");
@@ -79,11 +80,22 @@ const tPayload = tInner.map().find((e) => e.key().sym().toString() === "payload"
 const tKeys = tPayload.map().map((e) => e.key().sym().toString());
 ok(
   JSON.stringify(tKeys) ===
-    JSON.stringify(["b_aud_s", "b_tilde", "c_spend_new", "c_tx", "r_aud_r", "r_e", "sigma", "v_aud_r", "v_aud_s", "v_tilde"]),
+    JSON.stringify([
+      "b_tilde",
+      "b_tilde_aud_s",
+      "c_spend_new",
+      "c_transfer",
+      "r_e_point",
+      "r_tilde_aud_r",
+      "sigma",
+      "v_tilde",
+      "v_tilde_aud_r",
+      "v_tilde_aud_s",
+    ]),
   "transfer payload keys sorted (10 fields)",
 );
-const cTx = tPayload.map().find((e) => e.key().sym().toString() === "c_tx").val();
-ok(cTx.bytes().length === 64, "c_tx is 64 bytes");
+const cTransfer = tPayload.map().find((e) => e.key().sym().toString() === "c_transfer").val();
+ok(cTransfer.bytes().length === 64, "c_transfer is 64 bytes");
 const bTilde = tPayload.map().find((e) => e.key().sym().toString() === "b_tilde").val();
 ok(bTilde.bytes().length === 32, "b_tilde is 32 bytes");
 

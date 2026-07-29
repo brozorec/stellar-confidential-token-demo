@@ -128,7 +128,7 @@ The reconstruction mechanics live in [`@ctd/sdk`](packages/sdk/README.md#state-r
 
 - Node ≥ 20, pnpm 10
 - For rebuilding contracts: Rust stable + `wasm32v1-none`, `stellar` CLI ≥ 25.2. The OpenZeppelin crates are pulled as **git dependencies** from the `feat/confidential-verifier-ultrahonk` branch (pinned by `Cargo.lock`) — no local checkout needed.
-- For regenerating circuit artifacts only: `nargo` 1.0.0-beta.9, `bb` 0.87.0, and a local checkout of `OpenZeppelin/stellar-contracts` @ `feat/confidential-verifier-ultrahonk` at `../stellar-contracts-cv-ultrahonk` (the disclosure circuits' `Nargo.toml` path-depends on its Noir lib).
+- For regenerating circuit artifacts only: `nargo` 1.0.0-beta.11, `bb` 0.87.0, and a local checkout of `OpenZeppelin/stellar-contracts` @ `feat/confidential-verifier-ultrahonk` at `../stellar-contracts-cv-ultrahonk` (the disclosure circuits' `Nargo.toml` path-depends on its Noir lib).
 
 ## License
 

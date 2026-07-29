@@ -4,7 +4,7 @@
 // generators, Poseidon2 sponge, ECDH, the derivation formulas) and ask the
 // REAL compiled circuit (via noir_js) to solve it. If execution succeeds, every
 // in-circuit `assert(derived == public_input)` held — meaning the SDK computed
-// Y, PVK, vk, C_spend', C_tx, R_e, the encrypted scalars, and BOTH auditor
+// Y, PVK, vk, C_spend', C_transfer, R_e, the encrypted scalars, and BOTH auditor
 // channels exactly as the circuit does. Negative cases tamper one public input
 // and require rejection, proving the test actually constrains.
 import { readFileSync } from "node:fs";
@@ -27,6 +27,8 @@ const circuit = (name) =>
 // Any valid 56-char strkey works as the bound token address.
 const TOKEN = "CCREDIB3DG3IBVUKBL7QMEK4MTPSTODR7MQ34QY4SQ5LZ5L4WFWNVNXG";
 const addrF = addressToField(TOKEN);
+// The registering account, bound into the register proof as `acct_f` (L-06).
+const ACCOUNT = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
 
 // A mock auditor key: any on-curve, non-identity Grumpkin point.
 const auditorKey = () => scalarMul(randomScalar(), G);
@@ -61,12 +63,15 @@ const transferNoir = new Noir(circuit("transfer"));
 console.log("register:");
 await expectOk("SDK Y/PVK satisfy the circuit", async () => {
   const keys = deriveKeys(randomScalar(), addrF);
-  const { inputs } = buildRegisterWitness(keys);
+  const { inputs } = buildRegisterWitness(keys, ACCOUNT);
   await registerNoir.execute(inputs);
 });
+// No negative case for `acct_f`: it is referenced by no gate, so witness
+// solving accepts any value. Its binding lives in the proof transcript and is
+// only observable at verification (see witness/register.ts).
 await expectReject("tampered PVK.x rejected", async () => {
   const keys = deriveKeys(randomScalar(), addrF);
-  const { inputs } = buildRegisterWitness(keys);
+  const { inputs } = buildRegisterWitness(keys, ACCOUNT);
   await registerNoir.execute({ ...inputs, pvk_x: "0x1" });
 });
 

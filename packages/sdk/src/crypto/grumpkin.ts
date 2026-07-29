@@ -18,8 +18,10 @@
 import { weierstrassN, type WeierstrassPoint } from "@noble/curves/abstract/weierstrass";
 import { Field } from "@noble/curves/abstract/modular";
 
-import { FR_MODULUS, FP_MODULUS, G_X, G_Y, H_X, H_Y } from "./constants.js";
+import { FR_MODULUS, FP_MODULUS, G_X, G_Y, H_X, H_Y, DOMAIN } from "./constants.js";
 import { fromBytesBE, toBytes32BE } from "./field.js";
+// poseidon2.ts depends only on constants.js/field.js, so this is not a cycle.
+import { poseidonWithDomain } from "./poseidon2.js";
 
 /** Grumpkin base field = BN254 `F_r` (point coordinates; Noir `Field`). */
 export const Fr = Field(FR_MODULUS);
@@ -80,11 +82,25 @@ export function commit(value: bigint, randomness: bigint): Point {
   return scalarMul(value, G).add(scalarMul(randomness, H));
 }
 
-/** ECDH shared-secret x-coordinate: `(scalar · P).x`. Throws on identity. */
+/**
+ * ECDH shared-secret SCALAR: `s = Poseidon2(ECDH_SHARED_SECRET, S.x, S.y)` where
+ * `S = scalar · P`. Mirrors `lib.nr::ecdh`. Throws on the identity.
+ *
+ * Both coordinates are absorbed. An x-only extraction (what this returned
+ * previously) is negation-invariant: `P` and `-P = (P.x, -P.y)` share an
+ * x-coordinate, so every scalar produced the same shared secret against a key
+ * and against its negation — and `-PVK = (-vk)·H` is itself a valid, canonical
+ * registration. The absorb `[tag, S.x, S.y]` fills exactly one rate-3 block, so
+ * the binding costs a single permutation.
+ *
+ * Callers that need the shared-secret POINT (not the scalar) must use
+ * {@link scalarMul} directly.
+ */
 export function ecdh(scalar: bigint, p: Point): bigint {
   const s = scalarMul(scalar, p);
   if (s.is0()) throw new Error("ecdh produced the identity (degenerate key)");
-  return s.toAffine().x;
+  const { x, y } = s.toAffine();
+  return poseidonWithDomain(DOMAIN.ECDH_SHARED_SECRET, [x, y]);
 }
 
 /** Affine coordinates, returning `(0, 0)` for the identity. */

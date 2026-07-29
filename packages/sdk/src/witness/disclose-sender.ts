@@ -58,7 +58,7 @@ export function buildDiscloseSenderWitness(p: DiscloseSenderParams): DiscloseSen
 
   // DS4/DS5 — reconstruct the recipient-side decryption from the sender side.
   const sBx = ecdh(rEScalar, pvkB);
-  const vTx = decryptWithDomain(event.vTilde, DOMAIN.TX_AMOUNT, sBx, event.sigma);
+  const vTx = decryptWithDomain(event.vTilde, DOMAIN.TRANSFER_AMOUNT, sBx, event.sigma);
   if (vTx >= 1n << 127n) {
     throw new Error(
       "event does not decrypt to a valid amount — does PVK_B belong to the event's recipient?",

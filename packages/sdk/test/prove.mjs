@@ -18,6 +18,8 @@ import { loadCircuit } from "../src/proving/artifacts.ts";
 
 const TOKEN = "CCREDIB3DG3IBVUKBL7QMEK4MTPSTODR7MQ34QY4SQ5LZ5L4WFWNVNXG";
 const addrF = addressToField(TOKEN);
+// The registering account, bound into the register proof as `acct_f`.
+const ACCOUNT = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
 const auditorKey = () => scalarMul(randomScalar(), G);
 
 let pass = 0,
@@ -51,7 +53,7 @@ console.log("proving (UltraHonk + keccak):");
 
 await proveAndVerify("register", () => {
   const keys = deriveKeys(randomScalar(), addrF);
-  return buildRegisterWitness(keys).inputs;
+  return buildRegisterWitness(keys, ACCOUNT).inputs;
 });
 
 await proveAndVerify("withdraw", () => {

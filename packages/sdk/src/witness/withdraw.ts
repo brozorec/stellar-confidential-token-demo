@@ -4,7 +4,7 @@
  * sender-auditor balance checkpoint.
  *
  * Public-input order (matches `storage.rs::withdraw`):
- *   C_spend, Y, addr_f, K_aud_s, a, C_spend', sigma, b_tilde, R_e, b_aud_s
+ *   C_spend, Y, addr_f, K_aud_s, a, C_spend', sigma, b_tilde, R_e, b_tilde_aud_s
  */
 
 import type { KeyPair } from "../crypto/keys.js";

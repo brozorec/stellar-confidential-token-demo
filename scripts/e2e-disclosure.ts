@@ -88,7 +88,7 @@ async function main(): Promise<void> {
 
     console.log("\n[register + fund]");
     for (const [who, keys, acct] of [["alice", aliceKeys, alice], ["bob", bobKeys, bob]] as const) {
-      const w = buildRegisterWitness(keys);
+      const w = buildRegisterWitness(keys, acct.kp.publicKey());
       const { proof } = await registerProver.prove(w.inputs);
       await submitRegister(client, acct.signer, acct.kp.publicKey(), AUDITOR_ID, w, proof);
       console.log(`  ${who} registered`);

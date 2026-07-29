@@ -75,10 +75,10 @@ export const DOMAIN = {
   DELEGATION_VIEWING_KEY: 3n,
   /** r' = Poseidon2(SPEND_RANDOMNESS, vk, sigma). */
   SPEND_RANDOMNESS: 4n,
-  /** r_tx = Poseidon2(TX_BLINDING, s, sigma). */
-  TX_BLINDING: 5n,
-  /** v_tilde = v_tx + Poseidon2(TX_AMOUNT, s, sigma). */
-  TX_AMOUNT: 6n,
+  /** r_transfer = Poseidon2(TRANSFER_BLINDING, s, sigma). */
+  TRANSFER_BLINDING: 5n,
+  /** v_tilde = v_transfer + Poseidon2(TRANSFER_AMOUNT, s, sigma). */
+  TRANSFER_AMOUNT: 6n,
   /** b_tilde = v_new + Poseidon2(ENCRYPTED_BALANCE, vk, sigma). */
   ENCRYPTED_BALANCE: 7n,
   /** a_tilde = v_a + Poseidon2(ENCRYPTED_ALLOWANCE, dvk, sigma_a). */
@@ -92,12 +92,16 @@ export const DOMAIN = {
   /** Recipient-auditor channel tag. */
   AUDITOR_RECIPIENT: 12n,
   /**
-   * Off-chain selective-disclosure ciphertext to a disclosure recipient:
-   * `v_tilde_disc = v_tx + Poseidon2(DISCLOSURE, S_disc.x, nu)`.
-   * SELECTIVE_DISCLOSURE.md §2.2 / §4 (`delta_disc`); continues the on-chain
-   * tag list. Source of truth: packages/disclosure circuits.
+   * ECDH shared-secret scalar extraction: `s = Poseidon2(ECDH_SHARED_SECRET,
+   * S.x, S.y)` where `S = scalar · P`. DESIGN §2.4.
+   *
+   * Absorbing `S.y` (rather than taking `S.x` alone, as the previous revision
+   * did) removes the negation invariance of an x-only extraction: `P` and
+   * `-P = (P.x, -P.y)` share an x-coordinate, so `(scalar · P).x` mapped a key
+   * and its negation — itself a valid, canonical registration — to the same
+   * shared secret for every scalar. See {@link ecdh}.
    */
-  DISCLOSURE: 13n,
+  ECDH_SHARED_SECRET: 13n,
   /** Aggregate-disclosure nonce binding (`delta_disc_bind`, §10). Reserved. */
   DISCLOSURE_BIND: 14n,
   /**
@@ -109,6 +113,18 @@ export const DOMAIN = {
    * `(vk, sigma)`-keyed calls (SPEND_RANDOMNESS, ENCRYPTED_BALANCE).
    */
   EPHEMERAL_KEY: 15n,
+  /**
+   * Off-chain selective-disclosure ciphertext to a disclosure recipient:
+   * `v_tilde_disc = v_transfer + Poseidon2(DISCLOSURE, S_disc.x, nu)`.
+   * SELECTIVE_DISCLOSURE.md §2.2 / §4 (`delta_disc`). Source of truth:
+   * packages/disclosure circuits.
+   *
+   * Moved from 13 to 16: upstream claimed 13 for {@link DOMAIN.ECDH_SHARED_SECRET},
+   * and the disclosure circuits call `ecdh()` themselves — a shared tag would put
+   * two unrelated two-input Poseidon calls on one domain inside a single circuit,
+   * making a disclosure pad collide with an ECDH scalar.
+   */
+  DISCLOSURE: 16n,
 } as const;
 
 /** Verifier circuit-type discriminants (verifier/mod.rs `CircuitType`). */

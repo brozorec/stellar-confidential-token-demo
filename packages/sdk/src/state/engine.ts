@@ -10,7 +10,7 @@
  * Reconstruction rules (owner = `state.address`):
  *   - register(me)        → mark registered.
  *   - deposit(_, me)      → receiving += (amount, 0)   [deposits carry r = 0].
- *   - transfer(other, me) → ECDH-decrypt (v_tx, r_tx); receiving += (v_tx, r_tx).
+ *   - transfer(other, me) → ECDH-decrypt (v_transfer, r_transfer); receiving += both.
  *   - merge(me)           → spendable += receiving; receiving = (0, 0).
  *   - withdraw(me, _)     → spendable = open(b_tilde, sigma)  [event encodes v_new].
  *   - transfer(me, _)     → spendable = open(b_tilde, sigma).
@@ -28,7 +28,7 @@
 import { commit, ecdh, type Point } from "../crypto/grumpkin.js";
 import { fpAdd, frMod } from "../crypto/field.js";
 import { DOMAIN } from "../crypto/constants.js";
-import { deriveSpendR, deriveTxBlind, poseidonWithDomain } from "../crypto/poseidon2.js";
+import { deriveSpendR, deriveTransferBlind, poseidonWithDomain } from "../crypto/poseidon2.js";
 import type { KeyPair } from "../crypto/keys.js";
 import type { ChainClient } from "../chain/client.js";
 import { type ConfidentialEvent } from "../chain/events.js";
@@ -62,11 +62,15 @@ export class StateEngine {
   constructor(private cfg: StateEngineConfig) {}
 
   /** Recover an incoming transfer's amount and blinding from its event. */
-  decryptIncoming(rE: Point, vTilde: bigint, sigma: bigint): { vTx: bigint; rTx: bigint } {
+  decryptIncoming(
+    rE: Point,
+    vTilde: bigint,
+    sigma: bigint,
+  ): { vTransfer: bigint; rTransfer: bigint } {
     const s = ecdh(this.cfg.keys.vk, rE);
-    const vTx = frMod(vTilde - poseidonWithDomain(DOMAIN.TX_AMOUNT, [s, sigma]));
-    const rTx = deriveTxBlind(s, sigma);
-    return { vTx, rTx };
+    const vTransfer = frMod(vTilde - poseidonWithDomain(DOMAIN.TRANSFER_AMOUNT, [s, sigma]));
+    const rTransfer = deriveTransferBlind(s, sigma);
+    return { vTransfer, rTransfer };
   }
 
   /** Recover the owner's post-op spendable opening from an emitted b_tilde. */
@@ -106,10 +110,10 @@ export class StateEngine {
         // the event, and the recipient credit is added to receiving.
         if (ev.from === me) state.spendable = this.openSpendable(ev.bTilde, ev.sigma);
         if (ev.to === me) {
-          const { vTx, rTx } = this.decryptIncoming(ev.rE, ev.vTilde, ev.sigma);
+          const { vTransfer, rTransfer } = this.decryptIncoming(ev.rE, ev.vTilde, ev.sigma);
           state.receiving = {
-            v: state.receiving.v + vTx,
-            r: fpAdd(state.receiving.r, rTx),
+            v: state.receiving.v + vTransfer,
+            r: fpAdd(state.receiving.r, rTransfer),
           };
         }
         break;

@@ -81,13 +81,13 @@ async function main(): Promise<void> {
 
     console.log("\n[register]");
     {
-      const w = buildRegisterWitness(aliceKeys);
+      const w = buildRegisterWitness(aliceKeys, alice.kp.publicKey());
       const { proof } = await registerProver.prove(w.inputs);
       const r = await submitRegister(client, alice.signer, alice.kp.publicKey(), AUDITOR_ID, w, proof);
       console.log(`  alice registered (tx ${r.hash.slice(0, 8)}…, on-chain proof OK)`);
     }
     {
-      const w = buildRegisterWitness(bobKeys);
+      const w = buildRegisterWitness(bobKeys, bob.kp.publicKey());
       const { proof } = await registerProver.prove(w.inputs);
       const r = await submitRegister(client, bob.signer, bob.kp.publicKey(), AUDITOR_ID, w, proof);
       console.log(`  bob registered (tx ${r.hash.slice(0, 8)}…)`);

@@ -37,9 +37,10 @@ mod tests;
 //                                                    (matches T9 / O9).
 //   D5  v_tx in [0, 2^127)                           Range validity.
 //   U1  R_disc = r_disc * H, r_disc != 0             Disclosure ephemeral key.
-//   U2  S_disc = r_disc * P_R                        Disclosure ECDH.
+//   U2  s_disc = ecdh(r_disc, P_R)                    Disclosure ECDH
+//                                                    shared scalar (2.4).
 //   U3  v_tilde_disc = v_tx
-//          + Poseidon2(delta_disc, S_disc.x, nu)     Value sealed to the
+//          + Poseidon2(delta_disc, s_disc, nu)       Value sealed to the
 //                                                    disclosure recipient,
 //                                                    bound to their nonce.
 //
@@ -76,11 +77,17 @@ mod tests;
 //   v_tx    Plaintext transfer amount (decrypted from the event).
 //   r_disc  Ephemeral scalar for the disclosure ciphertext; r_disc != 0 (U1).
 
-/// Disclosure ciphertext domain tag (`delta_disc`). Continues the design
-/// doc's tag list (DESIGN.md Section 13 ends at AUDITOR_RECIPIENT = 12;
-/// SELECTIVE_DISCLOSURE.md Section 2.2 adds this one). The SDK must use the
-/// exact same number.
-pub global DISCLOSURE: Field = 13;
+/// Disclosure ciphertext domain tag (`delta_disc`). SELECTIVE_DISCLOSURE.md
+/// Section 2.2. The SDK must use the exact same number.
+///
+/// 16, not 13: upstream's on-chain tag list grew past AUDITOR_RECIPIENT = 12 and
+/// claimed 13 for ECDH_SHARED_SECRET, which `ecdh()` -- called by D3 below --
+/// now absorbs. Sharing a tag would put the U3 disclosure pad and the D3 ECDH
+/// scalar on the same domain inside this one circuit, so a pad crafted with
+/// `nu = S.y` would equal the transfer's shared secret and leak the full opening
+/// of C_transfer rather than just the amount. 14 and 15 are already spoken for
+/// off-chain (DISCLOSURE_BIND, EPHEMERAL_KEY).
+pub global DISCLOSURE: Field = 16;
 
 fn main(
     sk: Field,
@@ -135,10 +142,12 @@ fn main(
     let p_r = EmbeddedCurvePoint { x: p_r_x, y: p_r_y, is_infinite: false };
     assert_on_curve_non_identity(p_r);
 
-    // U2
-    let s_disc = scalar_mul(r_disc, p_r);
+    // U2 -- via the shared `ecdh` gadget, so the disclosure channel inherits the
+    // same full-point binding as D3: `s = Poseidon2(ECDH_SHARED_SECRET, S.x, S.y)`.
+    // Taking `S_disc.x` alone would let `P_R` and `-P_R` produce one mask.
+    let s_disc = ecdh(r_disc, p_r);
 
     // U3
-    let mask = poseidon_with_domain(DISCLOSURE, [s_disc.x, nu]);
+    let mask = poseidon_with_domain(DISCLOSURE, [s_disc, nu]);
     assert(v_tx + mask == v_tilde_disc);
 }

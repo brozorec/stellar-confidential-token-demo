@@ -1,7 +1,7 @@
 // Fast auditor-decryption round-trip (no proving): build transfer/withdraw
 // witnesses with a known auditor secret k (K_aud = k·H), then check that the
 // auditor-side decryptors recover the amount, the sender's post-op balance,
-// and r_tx from nothing but the would-be event fields and k.
+// and r_transfer from nothing but the would-be event fields and k.
 import { deriveKeys } from "../src/crypto/keys.ts";
 import { H, scalarMul, commit } from "../src/crypto/grumpkin.ts";
 import { buildTransferWitness } from "../src/witness/transfer.ts";
@@ -41,13 +41,16 @@ const audited = auditTransfer(k, tev);
 ok(audited.amount === amount, "transfer: amount recovered");
 ok(audited.senderBalance === v - amount, "transfer: sender post-balance recovered");
 ok(audited.channelsAgree, "transfer: both channels agree");
-// r_tx must open the emitted C_tx: commit(v_tx, r_tx) == C_tx.
-ok(commit(audited.amount, audited.rTx).equals(tw.payload.cTx), "transfer: (v_tx, r_tx) opens C_tx");
+// r_transfer must open the emitted C_transfer: commit(v_transfer, r_transfer) == C_transfer.
+ok(
+  commit(audited.amount, audited.rTransfer).equals(tw.payload.cTransfer),
+  "transfer: (v_transfer, r_transfer) opens C_transfer",
+);
 
 const sCh = auditTransferSenderChannel(k, tev);
 const rCh = auditTransferRecipientChannel(k, tev);
 ok(sCh.amount === amount && sCh.senderBalance === v - amount, "sender channel standalone");
-ok(rCh.amount === amount && rCh.rTx === audited.rTx, "recipient channel standalone");
+ok(rCh.amount === amount && rCh.rTransfer === audited.rTransfer, "recipient channel standalone");
 
 // Wrong key: decrypts to garbage and the channels disagree.
 const wrong = auditTransfer(k + 1n, tev);
