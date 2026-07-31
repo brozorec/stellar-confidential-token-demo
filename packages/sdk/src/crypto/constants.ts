@@ -62,8 +62,18 @@ export const H_Y =
 export const POSEIDON2_IV_BASE = 1n << 64n; // 2^64 = 18446744073709551616
 
 // ---------------------------------------------------------------------------
-// Domain separation tags (lib.nr `mod domain`). The integer IS the wire
-// contract: it is the first element absorbed by every Poseidon2 call.
+// Domain separation tags. The integer IS the contract: it is the first element
+// absorbed by every Poseidon2 call.
+//
+// Tags 1-13 mirror lib.nr `mod domain` and are the ON-CHAIN wire contract (1 is
+// absorbed by the contract rather than a circuit; 2-13 inside circuits). Tags
+// 14-16 are absorbed neither in a circuit nor on-chain, so they are not part of
+// the on-chain contract, but they ARE part of the cross-client contract — two
+// clients must agree or they cannot read each other's disclosures. Their
+// authority is DESIGN_cont.md §13, enumerated in SDK.md §4.8.
+//
+// All sixteen MUST be distinct, and each MUST be used in exactly one sponge
+// mode (SDK.md §4.8): 11 and 12 are the two-mask tags, the rest single-output.
 // ---------------------------------------------------------------------------
 
 export const DOMAIN = {
@@ -102,17 +112,23 @@ export const DOMAIN = {
    * shared secret for every scalar. See {@link ecdh}.
    */
   ECDH_SHARED_SECRET: 13n,
-  /** Aggregate-disclosure nonce binding (`delta_disc_bind`, §10). Reserved. */
-  DISCLOSURE_BIND: 14n,
   /**
    * Wallet-side deterministic ephemeral scalar:
-   * `r_e = Poseidon2(EPHEMERAL_KEY, vk, sigma)`. Never absorbed inside a
-   * circuit — `r_e` is a free private witness there (only `R_e = r_e·H` and
-   * `r_e ≠ 0` are constrained), so this is a client convention, not a wire
-   * contract. It continues the tag list to stay collision-free with the other
-   * `(vk, sigma)`-keyed calls (SPEND_RANDOMNESS, ENCRYPTED_BALANCE).
+   * `r_e = Poseidon2(EPHEMERAL_KEY, vk, sigma)`. SDK.md §4.8 (`delta_eph`).
+   *
+   * Absorbed neither in a circuit nor on-chain — `r_e` is a free private
+   * witness there (only `R_e = r_e·H` and `r_e ≠ 0` are constrained) — so this
+   * is not part of the on-chain wire contract. It IS part of the CROSS-CLIENT
+   * contract: two wallets serving the same account must derive the same `r_e`
+   * or transfers sent from one are not disclosable from the other (SDK.md §6.3,
+   * §10.5). The value is therefore fixed by the spec, not chosen locally.
    */
-  EPHEMERAL_KEY: 15n,
+  EPHEMERAL_KEY: 14n,
+  /**
+   * Aggregate-disclosure nonce binding (`delta_disc_bind`).
+   * SELECTIVE_DISCLOSURE.md §10, SDK.md §4.8. Reserved — not yet used.
+   */
+  DISCLOSURE_BIND: 15n,
   /**
    * Off-chain selective-disclosure ciphertext to a disclosure recipient:
    * `v_tilde_disc = v_transfer + Poseidon2(DISCLOSURE, S_disc.x, nu)`.
