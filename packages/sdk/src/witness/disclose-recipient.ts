@@ -48,7 +48,7 @@ export function buildDiscloseRecipientWitness(
   // not the event's `to` account, this yields garbage; the range guard below
   // catches that long before an unprovable witness reaches the circuit.
   const sX = ecdh(keys.vk, event.rE);
-  const vTx = decryptWithDomain(event.vTilde, DOMAIN.TX_AMOUNT, sX, event.sigma);
+  const vTx = decryptWithDomain(event.vTilde, DOMAIN.TRANSFER_AMOUNT, sX, event.sigma);
   if (vTx >= 1n << 127n) {
     throw new Error(
       "event does not decrypt to a valid amount under these keys — is this transfer addressed to this account?",

@@ -52,7 +52,10 @@ ok(deriveEphemeralRE(recipient.vk, tw.payload.sigma) !== tw.rEScalar, "different
 
 // Recipient decryption and auditor channels are unaffected by derived r_e.
 const sB = ecdh(recipient.vk, tw.payload.rE);
-ok(decryptWithDomain(tw.payload.vTilde, DOMAIN.TX_AMOUNT, sB, tw.payload.sigma) === amount, "recipient still decrypts v_tx");
+ok(
+  decryptWithDomain(tw.payload.vTilde, DOMAIN.TRANSFER_AMOUNT, sB, tw.payload.sigma) === amount,
+  "recipient still decrypts v_transfer",
+);
 const audited = auditTransfer(42n, { ...tw.payload });
 ok(audited.amount === amount && audited.channelsAgree, "auditor channels still decrypt");
 

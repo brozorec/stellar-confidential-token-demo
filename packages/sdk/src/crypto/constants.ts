@@ -62,8 +62,18 @@ export const H_Y =
 export const POSEIDON2_IV_BASE = 1n << 64n; // 2^64 = 18446744073709551616
 
 // ---------------------------------------------------------------------------
-// Domain separation tags (lib.nr `mod domain`). The integer IS the wire
-// contract: it is the first element absorbed by every Poseidon2 call.
+// Domain separation tags. The integer IS the contract: it is the first element
+// absorbed by every Poseidon2 call.
+//
+// Tags 1-13 mirror lib.nr `mod domain` and are the ON-CHAIN wire contract (1 is
+// absorbed by the contract rather than a circuit; 2-13 inside circuits). Tags
+// 14-16 are absorbed neither in a circuit nor on-chain, so they are not part of
+// the on-chain contract, but they ARE part of the cross-client contract — two
+// clients must agree or they cannot read each other's disclosures. Their
+// authority is DESIGN_cont.md §13, enumerated in SDK.md §4.8.
+//
+// All sixteen MUST be distinct, and each MUST be used in exactly one sponge
+// mode (SDK.md §4.8): 11 and 12 are the two-mask tags, the rest single-output.
 // ---------------------------------------------------------------------------
 
 export const DOMAIN = {
@@ -75,10 +85,10 @@ export const DOMAIN = {
   DELEGATION_VIEWING_KEY: 3n,
   /** r' = Poseidon2(SPEND_RANDOMNESS, vk, sigma). */
   SPEND_RANDOMNESS: 4n,
-  /** r_tx = Poseidon2(TX_BLINDING, s, sigma). */
-  TX_BLINDING: 5n,
-  /** v_tilde = v_tx + Poseidon2(TX_AMOUNT, s, sigma). */
-  TX_AMOUNT: 6n,
+  /** r_transfer = Poseidon2(TRANSFER_BLINDING, s, sigma). */
+  TRANSFER_BLINDING: 5n,
+  /** v_tilde = v_transfer + Poseidon2(TRANSFER_AMOUNT, s, sigma). */
+  TRANSFER_AMOUNT: 6n,
   /** b_tilde = v_new + Poseidon2(ENCRYPTED_BALANCE, vk, sigma). */
   ENCRYPTED_BALANCE: 7n,
   /** a_tilde = v_a + Poseidon2(ENCRYPTED_ALLOWANCE, dvk, sigma_a). */
@@ -92,23 +102,45 @@ export const DOMAIN = {
   /** Recipient-auditor channel tag. */
   AUDITOR_RECIPIENT: 12n,
   /**
-   * Off-chain selective-disclosure ciphertext to a disclosure recipient:
-   * `v_tilde_disc = v_tx + Poseidon2(DISCLOSURE, S_disc.x, nu)`.
-   * SELECTIVE_DISCLOSURE.md §2.2 / §4 (`delta_disc`); continues the on-chain
-   * tag list. Source of truth: packages/disclosure circuits.
+   * ECDH shared-secret scalar extraction: `s = Poseidon2(ECDH_SHARED_SECRET,
+   * S.x, S.y)` where `S = scalar · P`. DESIGN §2.4.
+   *
+   * Absorbing `S.y` (rather than taking `S.x` alone, as the previous revision
+   * did) removes the negation invariance of an x-only extraction: `P` and
+   * `-P = (P.x, -P.y)` share an x-coordinate, so `(scalar · P).x` mapped a key
+   * and its negation — itself a valid, canonical registration — to the same
+   * shared secret for every scalar. See {@link ecdh}.
    */
-  DISCLOSURE: 13n,
-  /** Aggregate-disclosure nonce binding (`delta_disc_bind`, §10). Reserved. */
-  DISCLOSURE_BIND: 14n,
+  ECDH_SHARED_SECRET: 13n,
   /**
    * Wallet-side deterministic ephemeral scalar:
-   * `r_e = Poseidon2(EPHEMERAL_KEY, vk, sigma)`. Never absorbed inside a
-   * circuit — `r_e` is a free private witness there (only `R_e = r_e·H` and
-   * `r_e ≠ 0` are constrained), so this is a client convention, not a wire
-   * contract. It continues the tag list to stay collision-free with the other
-   * `(vk, sigma)`-keyed calls (SPEND_RANDOMNESS, ENCRYPTED_BALANCE).
+   * `r_e = Poseidon2(EPHEMERAL_KEY, vk, sigma)`. SDK.md §4.8 (`delta_eph`).
+   *
+   * Absorbed neither in a circuit nor on-chain — `r_e` is a free private
+   * witness there (only `R_e = r_e·H` and `r_e ≠ 0` are constrained) — so this
+   * is not part of the on-chain wire contract. It IS part of the CROSS-CLIENT
+   * contract: two wallets serving the same account must derive the same `r_e`
+   * or transfers sent from one are not disclosable from the other (SDK.md §6.3,
+   * §10.5). The value is therefore fixed by the spec, not chosen locally.
    */
-  EPHEMERAL_KEY: 15n,
+  EPHEMERAL_KEY: 14n,
+  /**
+   * Aggregate-disclosure nonce binding (`delta_disc_bind`).
+   * SELECTIVE_DISCLOSURE.md §10, SDK.md §4.8. Reserved — not yet used.
+   */
+  DISCLOSURE_BIND: 15n,
+  /**
+   * Off-chain selective-disclosure ciphertext to a disclosure recipient:
+   * `v_tilde_disc = v_transfer + Poseidon2(DISCLOSURE, S_disc.x, nu)`.
+   * SELECTIVE_DISCLOSURE.md §2.2 / §4 (`delta_disc`). Source of truth:
+   * packages/disclosure circuits.
+   *
+   * Moved from 13 to 16: upstream claimed 13 for {@link DOMAIN.ECDH_SHARED_SECRET},
+   * and the disclosure circuits call `ecdh()` themselves — a shared tag would put
+   * two unrelated two-input Poseidon calls on one domain inside a single circuit,
+   * making a disclosure pad collide with an ECDH scalar.
+   */
+  DISCLOSURE: 16n,
 } as const;
 
 /** Verifier circuit-type discriminants (verifier/mod.rs `CircuitType`). */

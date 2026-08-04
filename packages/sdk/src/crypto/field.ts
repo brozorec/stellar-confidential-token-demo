@@ -94,13 +94,26 @@ export function hexToBytes(h: string): Uint8Array {
   return out;
 }
 
-/** Cryptographically-random nonzero scalar in `[1, r)`. */
+/**
+ * Cryptographically-random nonzero scalar, uniform on `[1, r)`.
+ *
+ * The rejection procedure is fixed by SDK.md §4.7 / DESIGN.md §2.2: draw 32
+ * bytes, clear the top **2** bits, redraw if the 254-bit candidate is `>= r`
+ * (or zero where nonzero is required). Since `r` is just over ¾ of `2^254`,
+ * the loop redraws ~25% of the time and the output is uniform on the full
+ * range.
+ *
+ * Masking more than 2 bits would still be `< r` — but it would silently
+ * shrink the range instead of rejecting, and the same procedure is the `RS`
+ * step of SDK.md §5.1's `sk` derivation, where a client that masks a different
+ * number of bits derives a DIFFERENT `sk` from the same root. The bit count is
+ * a cross-client contract, not a local bias-reduction choice.
+ */
 export function randomScalar(): bigint {
   for (;;) {
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
-    // Clear the top byte to bias-reduce; the rejection loop guarantees < r.
-    bytes[0] = 0;
+    bytes[0]! &= 0x3f; // clear the top 2 bits -> 254-bit candidate
     const v = fromBytesBE(bytes);
     if (v !== 0n && v < FR_MODULUS) return v;
   }

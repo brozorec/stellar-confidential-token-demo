@@ -10,8 +10,11 @@
  * decrypted state locally and must sync within the retention window. This is
  * the central, deliberate limitation of the demo.
  *
- * Events are soroban-sdk 26 `#[contractevent]` Map-format: `#[topic]` fields
+ * Events are soroban-sdk 27 `#[contractevent]` Map-format: `#[topic]` fields
  * become topics (after the event-name symbol), the rest become a data `ScMap`.
+ * The data keys below are the upstream struct field names verbatim — verify them
+ * against `stellar contract info interface --wasm …` after any dependency bump,
+ * since a renamed field surfaces only as a runtime "missing field" throw.
  */
 
 import { xdr, Address, scValToNative, rpc } from "@stellar/stellar-sdk";
@@ -171,10 +174,10 @@ export function buildConfidentialEvent(
         from: addr(1),
         to: addr(2),
         amount: data.i128("amount"),
-        rE: data.point("r_e"),
+        rE: data.point("r_e_point"),
         sigma: data.field("sigma"),
         bTilde: data.field("b_tilde"),
-        bAudS: data.field("b_aud_s"),
+        bAudS: data.field("b_tilde_aud_s"),
       };
     case "transfer":
       return {
@@ -182,14 +185,14 @@ export function buildConfidentialEvent(
         type: "transfer",
         from: addr(1),
         to: addr(2),
-        rE: data.point("r_e"),
+        rE: data.point("r_e_point"),
         vTilde: data.field("v_tilde"),
         sigma: data.field("sigma"),
         bTilde: data.field("b_tilde"),
-        vAudR: data.field("v_aud_r"),
-        rAudR: data.field("r_aud_r"),
-        vAudS: data.field("v_aud_s"),
-        bAudS: data.field("b_aud_s"),
+        vAudR: data.field("v_tilde_aud_r"),
+        rAudR: data.field("r_tilde_aud_r"),
+        vAudS: data.field("v_tilde_aud_s"),
+        bAudS: data.field("b_tilde_aud_s"),
       };
     case "frozen":
     case "unfrozen":

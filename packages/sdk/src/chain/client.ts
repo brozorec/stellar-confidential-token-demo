@@ -110,16 +110,24 @@ export class ChainClient {
     return ok.result.retval;
   }
 
-  /** Read a confidential account, or `null` if `address` is not registered. */
+  /**
+   * Read a confidential account, or `null` if `address` is not registered.
+   *
+   * Only the simulate call is treated as "not registered" (the contract panics
+   * with `AccountNotRegistered`). A {@link parseAccount} failure is a real
+   * SDK/contract mismatch and propagates — swallowing it here would report every
+   * account as unregistered after an upstream field rename.
+   */
   async confidentialBalance(address: string): Promise<OnChainAccount | null> {
+    let retval: xdr.ScVal;
     try {
-      const retval = await this.simulate(this.cfg.contracts.token, "confidential_balance", [
+      retval = await this.simulate(this.cfg.contracts.token, "confidential_balance", [
         new Address(address).toScVal(),
       ]);
-      return parseAccount(retval);
     } catch {
       return null;
     }
+    return parseAccount(retval);
   }
 
   async isRegistered(address: string): Promise<boolean> {
@@ -191,6 +199,17 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * Decode the `ConfidentialAccount` struct returned by `confidential_balance`.
+ *
+ * The keys are the upstream struct field names verbatim (`storage.rs`), so they
+ * move when upstream renames them — as `spending_key`/`spendable_balance`/
+ * `receiving_balance` did, becoming `spending_public_key`/
+ * `spendable_commitment`/`receiving_commitment`. The completeness check at the
+ * end is what makes such a rename loud: without it an unrecognized key set
+ * yields an all-`undefined` object that passes as a registered account and only
+ * fails much later, inside commitment arithmetic.
+ */
 function parseAccount(val: xdr.ScVal): OnChainAccount {
   const entries = val.map();
   if (!entries) throw new Error("expected ScMap for ConfidentialAccount");
@@ -198,22 +217,31 @@ function parseAccount(val: xdr.ScVal): OnChainAccount {
   for (const e of entries) {
     const key = e.key().sym().toString();
     switch (key) {
-      case "spending_key":
+      case "spending_public_key":
         out.spendingKey = pointFromBytes(new Uint8Array(e.val().bytes()));
         break;
       case "viewing_public_key":
         out.viewingPublicKey = pointFromBytes(new Uint8Array(e.val().bytes()));
         break;
-      case "spendable_balance":
+      case "spendable_commitment":
         out.spendableBalance = pointFromBytes(new Uint8Array(e.val().bytes()));
         break;
-      case "receiving_balance":
+      case "receiving_commitment":
         out.receivingBalance = pointFromBytes(new Uint8Array(e.val().bytes()));
         break;
       case "auditor_id":
         out.auditorId = e.val().u32();
         break;
     }
+  }
+  const missing = (
+    ["spendingKey", "viewingPublicKey", "spendableBalance", "receivingBalance", "auditorId"] as const
+  ).filter((k) => out[k] === undefined);
+  if (missing.length > 0) {
+    throw new Error(
+      `ConfidentialAccount is missing ${missing.join(", ")} — the contract's field names ` +
+        `(${entries.map((e) => e.key().sym().toString()).join(", ")}) do not match this SDK build`,
+    );
   }
   return out as OnChainAccount;
 }

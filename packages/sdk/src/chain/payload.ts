@@ -58,9 +58,9 @@ export function encodeWithdrawData(w: WithdrawWitness, proof: Uint8Array): xdr.S
   const payload = scvStruct({
     c_spend_new: pointVal(p.cSpendNew),
     b_tilde: fieldVal(p.bTilde),
-    r_e: pointVal(p.rE),
+    r_e_point: pointVal(p.rE),
     sigma: fieldVal(p.sigma),
-    b_aud_s: fieldVal(p.bAudS),
+    b_tilde_aud_s: fieldVal(p.bAudS),
   });
   return envelope(payload, proof);
 }
@@ -69,15 +69,15 @@ export function encodeTransferData(w: TransferWitness, proof: Uint8Array): xdr.S
   const p = w.payload;
   const payload = scvStruct({
     c_spend_new: pointVal(p.cSpendNew),
-    c_tx: pointVal(p.cTx),
-    r_e: pointVal(p.rE),
+    c_transfer: pointVal(p.cTransfer),
+    r_e_point: pointVal(p.rE),
     v_tilde: fieldVal(p.vTilde),
     b_tilde: fieldVal(p.bTilde),
     sigma: fieldVal(p.sigma),
-    v_aud_r: fieldVal(p.vAudR),
-    r_aud_r: fieldVal(p.rAudR),
-    v_aud_s: fieldVal(p.vAudS),
-    b_aud_s: fieldVal(p.bAudS),
+    v_tilde_aud_r: fieldVal(p.vAudR),
+    r_tilde_aud_r: fieldVal(p.rAudR),
+    v_tilde_aud_s: fieldVal(p.vAudS),
+    b_tilde_aud_s: fieldVal(p.bAudS),
   });
   return envelope(payload, proof);
 }

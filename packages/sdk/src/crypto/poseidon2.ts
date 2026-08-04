@@ -35,7 +35,11 @@ export function sponge(inputs: bigint[]): bigint {
   }
 
   const remainder = m - full * 3;
-  if (remainder !== 0) {
+  // `m === 0` also permutes: the on-chain sponge always permutes before
+  // squeezing, so the empty input hashes to `permute([0,0,0,0])[0]` rather than
+  // to 0. Unreachable through `poseidonWithDomain` (the tag guarantees m >= 1),
+  // but kept in lockstep with `lib.nr::sponge`.
+  if (remainder !== 0 || m === 0) {
     for (let i = 0; i < remainder; i++) {
       state[i] = frAdd(state[i]!, inputs[full * 3 + i]!);
     }
@@ -51,9 +55,10 @@ export function poseidonWithDomain(d: bigint, inputs: bigint[]): bigint {
 }
 
 /**
- * Two-squeeze sponge (`lib.nr::sponge_squeeze_2`): absorbs `(d, s_x, sigma)`
- * in one block and returns `[state[0], state[1]]`. Index 0 is the amount mask,
- * index 1 is the balance/randomness mask.
+ * Two-squeeze sponge (`lib.nr::sponge_squeeze_2`): absorbs `(d, s, sigma)` — `s`
+ * being the ECDH shared-secret scalar from {@link ecdh} — in one block and
+ * returns `[state[0], state[1]]`. Index 0 is the amount mask, index 1 is the
+ * balance/randomness mask.
  */
 export function spongeSqueeze2(d: bigint, sx: bigint, sigma: bigint): [bigint, bigint] {
   const iv = frMod(3n * POSEIDON2_IV_BASE);
@@ -81,9 +86,12 @@ export const deriveSpendR = (vk: bigint, sigma: bigint): bigint =>
 export const deriveAllowR = (dvk: bigint, sigmaA: bigint): bigint =>
   poseidonWithDomain(DOMAIN.ALLOWANCE_RANDOMNESS, [dvk, sigmaA]);
 
-/** `r_tx = Poseidon2(TX_BLINDING, s, sigma)`. */
-export const deriveTxBlind = (s: bigint, sigma: bigint): bigint =>
-  poseidonWithDomain(DOMAIN.TX_BLINDING, [s, sigma]);
+/**
+ * `r_transfer = Poseidon2(TRANSFER_BLINDING, s, sigma)`. `s` is the recipient-ECDH
+ * shared-secret SCALAR from {@link ecdh} (no longer a bare x-coordinate).
+ */
+export const deriveTransferBlind = (s: bigint, sigma: bigint): bigint =>
+  poseidonWithDomain(DOMAIN.TRANSFER_BLINDING, [s, sigma]);
 
 /**
  * Deterministic ephemeral scalar `r_e = Poseidon2(EPHEMERAL_KEY, vk, sigma)`.
@@ -106,9 +114,9 @@ export const deriveEphemeralRE = (vk: bigint, sigma: bigint): bigint => {
 // Encrypted scalars: ciphertext = plaintext + Poseidon2(tag, ...)
 // ---------------------------------------------------------------------------
 
-/** `v_tilde = v_tx + Poseidon2(TX_AMOUNT, s, sigma)`. */
-export const encryptAmount = (vTx: bigint, s: bigint, sigma: bigint): bigint =>
-  frAdd(vTx, poseidonWithDomain(DOMAIN.TX_AMOUNT, [s, sigma]));
+/** `v_tilde = v_transfer + Poseidon2(TRANSFER_AMOUNT, s, sigma)`. */
+export const encryptAmount = (vTransfer: bigint, s: bigint, sigma: bigint): bigint =>
+  frAdd(vTransfer, poseidonWithDomain(DOMAIN.TRANSFER_AMOUNT, [s, sigma]));
 
 /** `b_tilde = v_new + Poseidon2(ENCRYPTED_BALANCE, vk, sigma)`. */
 export const encryptBalance = (vNew: bigint, vk: bigint, sigma: bigint): bigint =>
@@ -122,12 +130,21 @@ export const encryptAllowance = (vA: bigint, dvk: bigint, sigmaA: bigint): bigin
 export const encryptEscDvk = (dvk: bigint, s: bigint, opI: bigint): bigint =>
   frAdd(dvk, poseidonWithDomain(DOMAIN.ESCROWED_DELEGATION_VIEWING_KEY, [s, opI]));
 
-/** `b_tilde_aud_s = v_new + Poseidon2(AUDITOR_SENDER, s_a_s_x, sigma)`. */
+/**
+ * Sender-auditor balance checkpoint for the single-ciphertext circuits (Withdraw
+ * W_a3/W_a4): `b_tilde_aud_s = v_new + sponge_squeeze_2(AUDITOR_SENDER, s, sigma)[1]`.
+ *
+ * The pad is the sponge's SECOND squeeze — the balance slot every two-ciphertext
+ * sender channel uses — not a standalone `poseidonWithDomain` call (what this was
+ * before). The first squeeze is reserved for amount masks, so a balance
+ * checkpoint never shares a pad with an amount ciphertext even if an
+ * `(r_e, sigma)` pair were reused across operations.
+ */
 export const encryptAuditorSenderBalance = (
   vNew: bigint,
   sAsX: bigint,
   sigma: bigint,
-): bigint => frAdd(vNew, poseidonWithDomain(DOMAIN.AUDITOR_SENDER, [sAsX, sigma]));
+): bigint => frAdd(vNew, spongeSqueeze2(DOMAIN.AUDITOR_SENDER, sAsX, sigma)[1]);
 
 /**
  * `v_tilde_disc = v_tx + Poseidon2(DISCLOSURE, s_disc_x, nu)` — the U3 stage

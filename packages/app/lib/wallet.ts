@@ -183,7 +183,7 @@ export class ConfidentialWallet {
   }
 
   async register(onPhase?: (p: TxPhase) => void): Promise<void> {
-    const w = buildRegisterWitness(this.keys);
+    const w = buildRegisterWitness(this.keys, this.address);
     onPhase?.("proving");
     this.log("proving register…");
     const { proof } = await this.prover("register").prove(w.inputs);
@@ -351,7 +351,7 @@ export class ConfidentialWallet {
   async transferAmount(event: TransferEvent): Promise<bigint | null> {
     // Inbound path also covers a self-transfer (to === from === me).
     if (event.to === this.address) {
-      return this.engine.decryptIncoming(event.rE, event.vTilde, event.sigma).vTx;
+      return this.engine.decryptIncoming(event.rE, event.vTilde, event.sigma).vTransfer;
     }
     if (event.from === this.address) {
       const rEScalar = this.recoverRE(event);
@@ -359,10 +359,10 @@ export class ConfidentialWallet {
       const recipient = await this.client.confidentialBalance(event.to);
       if (!recipient) return null;
       const sBx = ecdh(rEScalar, recipient.viewingPublicKey);
-      const vTx = decryptWithDomain(event.vTilde, DOMAIN.TX_AMOUNT, sBx, event.sigma);
+      const vTransfer = decryptWithDomain(event.vTilde, DOMAIN.TRANSFER_AMOUNT, sBx, event.sigma);
       // A wrong key yields garbage far outside the 127-bit amount range.
-      if (vTx >= 1n << 127n) return null;
-      return vTx;
+      if (vTransfer >= 1n << 127n) return null;
+      return vTransfer;
     }
     return null;
   }

@@ -11,7 +11,7 @@
 //
 // Run from the repo root:  pnpm build:disclosure
 // (executes inside the @ctd/sdk package so bb.js resolves; requires nargo
-// 1.0.0-beta.9 on PATH and the bb CRS cache, same as the SDK prove tests).
+// 1.0.0-beta.11 on PATH and the bb CRS cache, same as the SDK prove tests).
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, copyFileSync, mkdirSync } from "node:fs";

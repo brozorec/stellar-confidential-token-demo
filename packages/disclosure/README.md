@@ -17,7 +17,7 @@ Rebuild after editing the circuit:
 pnpm build:disclosure   # nargo compile + VK via bb.js (keccak), writes artifacts/
 ```
 
-Requires `nargo 1.0.0-beta.9` and the `stellar_confidential_lib` checkout the `Nargo.toml` points at (the same path-dependency the contracts use). The VK is generated through bb.js — the exact library the browser runs — so the pin is byte-for-byte by construction.
+Requires `nargo 1.0.0-beta.11` and the `stellar_confidential_lib` checkout the `Nargo.toml` points at (the same path-dependency the contracts use). The VK is generated through bb.js — the exact library the browser runs — so the pin is byte-for-byte by construction.
 
 Remaining disclosure variants (D-auditor §8, D-balance §9, aggregates §10) belong here as sibling circuit packages with their own artifact pairs.
 

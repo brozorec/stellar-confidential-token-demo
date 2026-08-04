@@ -6,42 +6,46 @@
  * event carries — using nothing but the public event and `k`. No viewing
  * keys, no holder cooperation, no extra on-chain data:
  *
- *   S = k · R_e                      (ECDH against the event's ephemeral point;
- *                                     equals the prover's r_e · K_aud)
- *   masks = SpongeSqueeze2(δ_aud, S.x, σ)
+ *   s     = ecdh(k, R_e)             (ECDH against the event's ephemeral point;
+ *                                     equals the prover's ecdh(r_e, K_aud))
+ *   masks = SpongeSqueeze2(δ_aud, s, σ)
  *   plaintext = ciphertext − mask
  *
  * Channels (DESIGN.md §8.1):
  *   - sender channel (δ_aud_s):    transfer amount + sender's post-op balance
  *   - recipient channel (δ_aud_r): transfer amount + per-transfer Pedersen
- *     randomness r_tx (a full opening of C_tx, hence of the recipient's
- *     receiving balance between merges)
+ *     randomness r_transfer (a full opening of C_transfer, hence of the
+ *     recipient's receiving balance between merges)
  *
- * Withdraw events carry only a sender-channel balance checkpoint, masked with
- * a single Poseidon call (witness/withdraw.ts `encryptAuditorSenderBalance`),
- * not the two-squeeze sponge; the withdrawn amount is already public.
+ * Withdraw events carry only a sender-channel balance checkpoint. Its pad is the
+ * SECOND squeeze of the same two-squeeze sponge (the balance slot) — not a
+ * standalone Poseidon call, as an earlier revision of the circuit used; the
+ * first-squeeze amount slot goes unused because the withdrawn amount is public.
  */
 
 import { H, ecdh, scalarMul, type Point } from "../crypto/grumpkin.js";
 import { frMod } from "../crypto/field.js";
 import { DOMAIN } from "../crypto/constants.js";
-import { spongeSqueeze2, decryptWithDomain } from "../crypto/poseidon2.js";
+import { spongeSqueeze2 } from "../crypto/poseidon2.js";
 import type { TransferEvent, WithdrawEvent } from "../chain/events.js";
 
 /** What the sender's auditor learns from one transfer (§8.1, T_a5–T_a8). */
 export interface AuditedSenderChannel {
-  /** Transfer amount `v_tx`. */
+  /** Transfer amount `v_transfer`. */
   amount: bigint;
-  /** Sender's post-transfer spendable balance `v_A − v_tx`. */
+  /** Sender's post-transfer spendable balance `v_A − v_transfer`. */
   senderBalance: bigint;
 }
 
 /** What the recipient's auditor learns from one transfer (§8.1, T_a1–T_a4). */
 export interface AuditedRecipientChannel {
-  /** Transfer amount `v_tx`. */
+  /** Transfer amount `v_transfer`. */
   amount: bigint;
-  /** Per-transfer Pedersen randomness `r_tx` — with `amount`, a full opening of C_tx. */
-  rTx: bigint;
+  /**
+   * Per-transfer Pedersen randomness `r_transfer` — with `amount`, a full
+   * opening of `C_transfer`.
+   */
+  rTransfer: bigint;
 }
 
 /** Decrypt a transfer's sender-auditor channel with the auditor secret `k`. */
@@ -61,20 +65,20 @@ export function auditTransferRecipientChannel(
 ): AuditedRecipientChannel {
   const sX = ecdh(k, ev.rE);
   const [mV, mR] = spongeSqueeze2(DOMAIN.AUDITOR_RECIPIENT, sX, ev.sigma);
-  return { amount: frMod(ev.vAudR - mV), rTx: frMod(ev.rAudR - mR) };
+  return { amount: frMod(ev.vAudR - mV), rTransfer: frMod(ev.rAudR - mR) };
 }
 
 /** Both channels of one transfer, decrypted under a single auditor key. */
 export interface AuditedTransfer {
-  /** Transfer amount `v_tx` (from the sender channel). */
+  /** Transfer amount `v_transfer` (from the sender channel). */
   amount: bigint;
   /** Sender's post-transfer spendable balance. */
   senderBalance: bigint;
   /** Per-transfer Pedersen randomness (recipient channel). */
-  rTx: bigint;
+  rTransfer: bigint;
   /**
    * The amount decrypts independently on each channel; under the correct key
-   * the two MUST agree (the circuit constrains both to the same `v_tx`).
+   * the two MUST agree (the circuit constrains both to the same `v_transfer`).
    * `false` means `k` is not the auditor key for both parties of this event.
    */
   channelsAgree: boolean;
@@ -91,7 +95,7 @@ export function auditTransfer(k: bigint, ev: TransferEvent): AuditedTransfer {
   return {
     amount: s.amount,
     senderBalance: s.senderBalance,
-    rTx: r.rTx,
+    rTransfer: r.rTransfer,
     channelsAgree: s.amount === r.amount,
   };
 }
@@ -100,13 +104,18 @@ export function auditTransfer(k: bigint, ev: TransferEvent): AuditedTransfer {
  * Decrypt a withdraw's sender-auditor balance checkpoint (§8.2): the
  * post-withdrawal spendable balance `v − a`. The amount itself is public in
  * the event.
+ *
+ * The pad is `sponge_squeeze_2(δ_aud_s, s, σ)[1]` — the same balance slot the
+ * transfer sender channel uses (W_a3/W_a4). Index `[0]`, the amount slot, is
+ * deliberately skipped.
  */
 export function auditWithdraw(
   k: bigint,
   ev: Pick<WithdrawEvent, "rE" | "sigma" | "bAudS">,
 ): { senderBalance: bigint } {
   const sX = ecdh(k, ev.rE);
-  return { senderBalance: decryptWithDomain(ev.bAudS, DOMAIN.AUDITOR_SENDER, sX, ev.sigma) };
+  const [, mB] = spongeSqueeze2(DOMAIN.AUDITOR_SENDER, sX, ev.sigma);
+  return { senderBalance: frMod(ev.bAudS - mB) };
 }
 
 /** The registry public key `K_aud = k·H` for an auditor secret `k`. */
